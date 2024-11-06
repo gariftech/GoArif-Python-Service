@@ -1,0 +1,58 @@
+# Core FastAPI and ASGI server
+fastapi
+uvicorn
+starlette
+
+# LangChain, Google Generative AI, and related libraries
+langchain
+langchain-google-genai
+langchain-community
+google-generativeai
+
+# File handling and document processing
+pypdf
+unstructured
+openpyxl
+docx2txt
+python-magic
+python-pptx
+
+# Async support
+nest-asyncio
+
+# FAISS and tokenization
+faiss-cpu
+tiktoken
+
+# Data science and machine learning
+networkx
+pandas
+numpy
+seaborn
+matplotlib
+torch==2.3.0
+transformers
+bertopic
+wordcloud
+Sastrawi
+
+# Visualization
+plotly
+kaleido
+textwrap3
+
+# Web and file upload support
+python-multipart
+werkzeug
+pillow
+
+# PDF generation
+fpdf
+
+# Template rendering
+jinja2
+
+# Additional utilities
+ipython
+pydantic
+urllib3
