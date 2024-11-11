@@ -232,7 +232,7 @@ class AskResponse2(BaseModel):
     result: str
 
 # Route for analyzing documents
-@app.post("/", response_model=AnalyzeDocumentResponse)
+@app.post("/py/v1", response_model=AnalyzeDocumentResponse)
 async def analyze_document(
     api_key: str = Form(...),
     prompt: str = Form(...),
@@ -296,7 +296,7 @@ async def analyze_document(
         raise HTTPException(status_code=500, detail="An error occurred during document analysis.")
 
 # Route for answering questions
-@app.post("/ask", response_model=AskResponse)
+@app.post("/py/v1/ask", response_model=AskResponse)
 async def ask_question(
     request: Request,
     api_key: str = Form(...),
@@ -577,7 +577,7 @@ def generate_plot(df, plot_path, plot_type):
     return plot_path
 
 
-@app.post("/result", response_model=AnalyzeDocument1Response)
+@app.post("/py/v1/result", response_model=AnalyzeDocument1Response)
 async def result(api_key: str = Form(...), 
                  file: UploadFile = File(...), 
                  custom_question: str = Form(...)):
@@ -668,7 +668,7 @@ async def result(api_key: str = Form(...),
 
 
 
-@app.post("/multiclass", response_model=MulticlassResponse)
+@app.post("/py/v1/multiclass", response_model=MulticlassResponse)
 async def multiclass(
     request: Request,
     target_variable: str = Form(...),
@@ -862,7 +862,7 @@ async def multiclass(
 
 
 # Route for answering questions
-@app.post("/ask1", response_model=AskResponse1)
+@app.post("/py/v1/ask1", response_model=AskResponse1)
 async def ask_question(
     request: Request,
     api_key: str = Form(...),
@@ -1019,7 +1019,7 @@ emoticon_pattern = re.compile(u'('
     re.UNICODE)
 
 
-@app.post("/process", response_model=GetColumn)
+@app.post("/py/v1/process", response_model=GetColumn)
 async def process_file(request: Request, file: UploadFile = File(...)):
     global df
     file_location = f"static/{file.filename}"
@@ -1048,7 +1048,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
 
 
 
-@app.post("/analyze", response_model=AnalyzeDocumentResponse2)
+@app.post("/py/v1/analyze", response_model=AnalyzeDocumentResponse2)
 async def analyze(
     request: Request,
     api_key: str = Form(...),
@@ -1078,7 +1078,7 @@ async def analyze(
         if target_variable not in df.columns:
             return "Selected target variable does not exist in the dataset."
 
-        add_stopwords = ['the', 'of', 'is', 'a', 'in']
+        add_stopwords = ['the', 'of', 'is', 'a', 'in', 'https', 'yg', 'gua', 'gue', 'lo', 'lu', 'gw']
         custom_stopword_list = [word.strip() for word in custom_stopwords.split(',')]
         all_stopwords = data + custom_stopword_list + add_stopwords
 
@@ -1553,7 +1553,7 @@ async def analyze(
 
 
 # Route for answering questions
-@app.post("/ask2", response_model=AskResponse2)
+@app.post("/py/v1/ask2", response_model=AskResponse2)
 async def ask_question(
     request: Request,
     api_key: str = Form(...),
@@ -1682,4 +1682,4 @@ async def download_pdf():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=9000)
