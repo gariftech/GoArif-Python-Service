@@ -91,13 +91,23 @@ from langchain.prompts import PromptTemplate
 from langchain.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_google_genai import ChatGoogleGenerativeAI
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
 if os.getenv("FASTAPI_ENV") == "development":
     nest_asyncio.apply()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust as necessary for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize your model and other variables
 uploaded_file_path = None
@@ -351,12 +361,12 @@ async def ask_question(
             os.environ["GOOGLE_API_KEY"] = api
 
             # Split the text into chunks
-            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
             chunks = text_splitter.split_text(text)
 
             # Generate embeddings for the chunks
             embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-            document_search = FAISS.from_texts(chunks, embeddings)
+            document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
             if document_search:
                 query_embedding = embeddings.embed_query(question)
@@ -381,12 +391,12 @@ async def ask_question(
         os.environ["GOOGLE_API_KEY"] = api
 
         # Split text into chunks
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_text(text)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
 
         # Generate embeddings for the chunks
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-        document_search = FAISS.from_texts(chunks, embeddings)
+        document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
         # Generate query embedding and perform similarity search
         query_embedding = embeddings.embed_query(question)
@@ -904,9 +914,9 @@ async def ask_question(
 
         # Initialize embeddings and create FAISS vector store
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_text(text)
-        document_search = FAISS.from_texts(chunks, embeddings)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
+        document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
         # Generate query embedding and perform similarity search
         query_embedding = embeddings.embed_query(question)
@@ -1595,9 +1605,9 @@ async def ask_question(
 
         # Initialize embeddings and create FAISS vector store
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_text(text)
-        document_search = FAISS.from_texts(chunks, embeddings)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
+        document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
         # Generate query embedding and perform similarity search
         query_embedding = embeddings.embed_query(question)
