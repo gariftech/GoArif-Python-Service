@@ -15,7 +15,7 @@ import google.generativeai as genai
 import re
 import nest_asyncio
 from langchain.text_splitter import CharacterTextSplitter
-
+import base64
 
 import pandas as pd
 import seaborn as sns
@@ -140,6 +140,7 @@ class AnalyzeDocumentRequest(BaseModel):
 class AnalyzeDocumentResponse(BaseModel):
     meta: dict
     summary: str
+    
 
     
 
@@ -153,6 +154,7 @@ class AskResponse(BaseModel):
     meta: dict
     question: str
     result: str
+    
 
 
 # Define Pydantic models for requests and responses
@@ -183,6 +185,7 @@ class MulticlassResponse(BaseModel):
     plot4_path: str
     response4: str
     pdf_file_path: str
+    file_path: str
 
 class AskRequest1(BaseModel):
     question: str
@@ -192,12 +195,14 @@ class AskResponse1(BaseModel):
     meta: dict
     question: str
     result: str
+    
 
 
 
 class GetColumn(BaseModel):
     meta: dict
     columns: str
+    file_path: str
 
 class AnalyzeDocumentRequest2(BaseModel):
     api_key: str
@@ -230,6 +235,7 @@ class AnalyzeDocumentResponse2(BaseModel):
     unigram_negative: str
     gemini_response_neg2: str
     pdf_file_path: str
+    file_path: str
 
 
 class AskRequest2(BaseModel):
@@ -240,6 +246,7 @@ class AskResponse2(BaseModel):
     meta: dict
     question: str
     result: str
+    
 
 # Route for analyzing documents
 @app.post("/py/v1", response_model=AnalyzeDocumentResponse)
@@ -602,10 +609,19 @@ async def result(api_key: str = Form(...),
     with open(file_path, 'wb') as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Example: Assuming uploaded_filename and file_path are provided
     if uploaded_filename.endswith('.csv'):
         df = pd.read_csv(file_path)
+        # Convert CSV file content to base64 string
+        with open(file_path, "rb") as csv_file:
+            file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
+
     elif uploaded_filename.endswith('.xlsx'):
         df = pd.read_excel(file_path)
+        # Convert Excel file content to base64 string
+        with open(file_path, "rb") as excel_file:
+            file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
+
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format")
     
@@ -620,24 +636,23 @@ async def result(api_key: str = Form(...),
         return response.text
 
     try:
+        # Generate plots
         plot1_path = generate_plot(df, 'static/plot1.png', 'countplot')
         plot2_path = generate_plot(df, 'static/plot2.png', 'histplot')
 
+        # Generate Gemini responses
         response1 = generate_gemini_response(plot1_path)
         response2 = generate_gemini_response(plot2_path)
 
         uploaded_df = df
 
-        outputs = {
-            "barchart_visualization": plot1_path,
-            "gemini_response1": response1,
-            "histoplot_visualization": plot2_path,
-            "gemini_response2": response2
-        }
+        # Convert plots to base64 strings
+        with open(plot1_path, "rb") as image_file:
+            plot1_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        with open(plot2_path, "rb") as image_file:
+            plot2_bytes = base64.b64encode(image_file.read()).decode('utf-8')
 
-        with open("output.json", "w") as outfile:
-            json.dump(outputs, outfile)
-
+        # Generate PDF
         pdf = FPDF()
         pdf.set_font("Arial", size=12)
 
@@ -660,21 +675,24 @@ async def result(api_key: str = Form(...),
         pdf_file_path = os.path.join("static", "output.pdf")
         pdf.output(pdf_file_path)
 
-        pdf_file_path = os.path.join("static", "output.pdf")
-        pdf_file_path = pdf_file_path.replace("\\", "/")
+        # Convert PDF to base64
+        with open(pdf_file_path, "rb") as pdf_file:
+            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
 
+        # Return the response
         return AnalyzeDocument1Response(
             meta={"status": "success", "code": 200},
-            plot1_path=plot1_path,
+            plot1_path=plot1_bytes,
             response1=response1,
-            plot2_path=plot2_path,
+            plot2_path=plot2_bytes,
             response2=response2,
-            pdf_file_path=pdf_file_path,
-            file_path= file_path,
-             columns=", ".join(columns)
+            pdf_file_path=pdf_bytes,
+            file_path=file_bytes,  # CSV as base64 string
+            columns=", ".join(columns)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
@@ -692,9 +710,21 @@ async def multiclass(
     try:
         # Read the file content into a DataFrame
         if file.filename.endswith('.csv'):
+            # Load CSV file into DataFrame
             df = pd.read_csv(file.file, encoding='utf-8')
+            
+            # Convert CSV file content to base64 string
+            file.file.seek(0)  # Reset file pointer to the beginning
+            file_bytes = base64.b64encode(file.file.read()).decode('utf-8')
+
         elif file.filename.endswith('.xlsx'):
+            # Load Excel file into DataFrame
             df = pd.read_excel(file.file)
+            
+            # Convert Excel file content to base64 string
+            file.file.seek(0)  # Reset file pointer to the beginning
+            file_bytes = base64.b64encode(file.file.read()).decode('utf-8')
+
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format")
 
@@ -812,6 +842,13 @@ async def multiclass(
 
         document_analyzed = True
 
+
+        # Convert plots to base64 strings
+        with open(plot3_path, "rb") as image_file:
+            plot3_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        with open(plot4_path, "rb") as image_file:
+            plot4_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+
         # Create a dictionary to store the outputs
         outputs = {
             "multiBarchart_visualization": plot3_path,
@@ -857,13 +894,18 @@ async def multiclass(
         pdf.output(pdf_output_path)
         pdf_file_path = pdf_output_path.replace("\\", "/")
 
+        # Convert PDF to base64
+        with open(pdf_file_path, "rb") as pdf_file:
+            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
+
         return MulticlassResponse(
             meta={"status": "success", "code": 200},
-            plot3_path=plot3_path,
-            plot4_path=plot4_path,
+            plot3_path=plot3_bytes,
+            plot4_path=plot4_bytes,
             response3=response3,
             response4=response4,
-            pdf_file_path=pdf_file_path
+            pdf_file_path=pdf_bytes,
+            file_path=file_bytes
         )
 
     except Exception as e:
@@ -1040,9 +1082,21 @@ async def process_file(request: Request, file: UploadFile = File(...)):
     file_extension = os.path.splitext(file.filename)[1]
     try:
         if file_extension == '.csv':
+            # Load CSV file into DataFrame
             df = pd.read_csv(file_location, delimiter=",")
+            
+            # Convert CSV file content to base64 string
+            with open(file_location, "rb") as csv_file:
+                file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
+
         elif file_extension in ['.xls', '.xlsx']:
+            # Load Excel file into DataFrame
             df = pd.read_excel(file_location)
+            
+            # Convert Excel file content to base64 string
+            with open(file_location, "rb") as excel_file:
+                file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
+
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
@@ -1051,7 +1105,8 @@ async def process_file(request: Request, file: UploadFile = File(...)):
 
         return GetColumn(
             meta={"status": "success", "code": 200},
-            columns=", ".join(columns)
+            columns=", ".join(columns),
+            file_path=file_bytes
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1078,9 +1133,21 @@ async def analyze(
     file_extension = os.path.splitext(file.filename)[1]
     try:
         if file_extension == '.csv':
+            # Load CSV file into DataFrame
             df = pd.read_csv(file_location, delimiter=",")
+            
+            # Convert CSV file content to base64 string
+            with open(file_location, "rb") as csv_file:
+                file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
+
         elif file_extension in ['.xls', '.xlsx']:
+            # Load Excel file into DataFrame
             df = pd.read_excel(file_location)
+            
+            # Convert Excel file content to base64 string
+            with open(file_location, "rb") as excel_file:
+                file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
+
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
@@ -1138,6 +1205,10 @@ async def analyze(
         sentiment_plot_path = 'static/sentiment_distribution.png'
         plt.savefig(sentiment_plot_path)
 
+        # Convert plots to base64 strings
+        with open(sentiment_plot_path, "rb") as image_file:
+            sentiment_plot_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+
         model = BERTopic(verbose=True)
         model.fit(df['cleaned_text'])
         topics, probabilities = model.transform(df['cleaned_text'])
@@ -1153,6 +1224,18 @@ async def analyze(
         fig2 = model.visualize_distribution(topic_distr[0])
         fig2.write_image('static/dist.png')
         topic_plot_path2 = 'static/dist.png'
+
+
+        # Convert plots to base64 strings
+        with open(topic_plot_path, "rb") as image_file:
+            topic_plot_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(topic_plot_path1, "rb") as image_file:
+            topic_plot1_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(topic_plot_path2, "rb") as image_file:
+            topic_plot2_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        
 
         # Generate sentiment analysis results table
         analysis_results = df.to_html(classes='data')
@@ -1219,6 +1302,20 @@ async def analyze(
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg = "Error: Failed to generate content with Gemini API."
+        
+
+
+        # Convert plots to base64 strings
+        with open(wordcloud_positive, "rb") as image_file:
+            wordcloud_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(wordcloud_neutral, "rb") as image_file:
+            wordcloud_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(wordcloud_negative, "rb") as image_file:
+            wordcloud_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+
+
 
         # Bigram Positive
         words1 = positive_text.split()
@@ -1297,6 +1394,20 @@ async def analyze(
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg1 = "Error: Failed to generate content with Gemini API."
+
+
+        
+        # Convert plots to base64 strings
+        with open(bigram_positive, "rb") as image_file:
+            bigram_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(bigram_neutral, "rb") as image_file:
+            bigram_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(bigram_negative, "rb") as image_file:
+           bigram_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+
+
             
         # Unigram Positive
         words2 = positive_text.split()
@@ -1412,7 +1523,15 @@ async def analyze(
                 return f"Error encoding text: {str(e)}"
 
 
-
+        # Convert plots to base64 strings
+        with open(unigram_positive, "rb") as image_file:
+            unigram_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(unigram_neutral, "rb") as image_file:
+            unigram_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Convert plots to base64 strings
+        with open(unigram_negative, "rb") as image_file:
+           unigram_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
 
 
 
@@ -1528,32 +1647,38 @@ async def analyze(
 
         pdf_file_path = os.path.join("static", "output.pdf")
         pdf_file_path = pdf_file_path.replace("\\", "/")
+
+        # Convert PDF to base64
+        with open(pdf_file_path, "rb") as pdf_file:
+            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
         
 
         return AnalyzeDocumentResponse2(
                     meta={"status": "success", "code": 200},
-                    sentiment_plot_path=sentiment_plot_path,
-                    topic_plot_path=topic_plot_path, topic_plot_path1=topic_plot_path1,
-                    topic_plot_path2=topic_plot_path2, 
-                    wordcloud_positive=wordcloud_positive,
+                    sentiment_plot_path=sentiment_plot_bytes,
+                    topic_plot_path=topic_plot_bytes, 
+                    topic_plot_path1=topic_plot1_bytes,
+                    topic_plot_path2=topic_plot2_bytes, 
+                    wordcloud_positive=wordcloud_positive_bytes,
                     gemini_response_pos= gemini_response_pos,
-                    wordcloud_neutral=wordcloud_neutral, 
+                    wordcloud_neutral=wordcloud_neutral_bytes, 
                     gemini_response_neu= gemini_response_neu,
-                    wordcloud_negative=wordcloud_negative,
+                    wordcloud_negative=wordcloud_negative_bytes,
                     gemini_response_neg= gemini_response_neg,
-                    bigram_positive=bigram_positive, 
+                    bigram_positive=bigram_positive_bytes, 
                     gemini_response_pos1= gemini_response_pos1,
-                    bigram_neutral=bigram_neutral, 
+                    bigram_neutral=bigram_neutral_bytes, 
                     gemini_response_neu1= gemini_response_neu1,
-                    bigram_negative=bigram_negative,
+                    bigram_negative=bigram_negative_bytes,
                     gemini_response_neg1= gemini_response_neg1,
-                    unigram_positive= unigram_positive,
+                    unigram_positive= unigram_positive_bytes,
                     gemini_response_pos2= gemini_response_pos2,
-                    unigram_neutral= unigram_neutral,
+                    unigram_neutral= unigram_neutral_bytes,
                     gemini_response_neu2= gemini_response_neu2,
-                    unigram_negative= unigram_negative,
+                    unigram_negative= unigram_negative_bytes,
                     gemini_response_neg2= gemini_response_neg2,
-                    pdf_file_path=pdf_file_path
+                    pdf_file_path=pdf_bytes,
+                    file_path=file_bytes
             )
 
     except Exception as e:
