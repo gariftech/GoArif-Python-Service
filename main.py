@@ -641,8 +641,8 @@ async def result(api_key: str = Form(...),
         plot2_path = generate_plot(df, 'static/plot2.png', 'histplot')
 
         # Generate Gemini responses
-        response1 = generate_gemini_response(plot1_path)
-        response2 = generate_gemini_response(plot2_path)
+        response1 = format_text(generate_gemini_response(plot1_path))
+        response2 = format_text(generate_gemini_response(plot2_path))
 
         uploaded_df = df
 
@@ -834,11 +834,11 @@ async def multiclass(
         # Response for the barplot
         img_barplot = Image.open(plot3_path)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        response3 = model.generate_content([custom_question, img_barplot]).text
+        response3 = format_text(model.generate_content([custom_question, img_barplot]).text)
 
         # Response for the histplot
         img_histplot = Image.open(plot4_path)
-        response4 = model.generate_content([custom_question, img_histplot]).text
+        response4 = format_text(model.generate_content([custom_question, img_histplot]).text)
 
         document_analyzed = True
 
@@ -1262,7 +1262,7 @@ async def analyze(
         try:
             response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img])
             response.resolve()
-            gemini_response_pos = response.text
+            gemini_response_pos = format_text(response.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_pos = "Error: Failed to generate content with Gemini API."
@@ -1280,7 +1280,7 @@ async def analyze(
         try:
             response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img])
             response.resolve()
-            gemini_response_neu = response.text
+            gemini_response_neu = format_text(response.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neu = "Error: Failed to generate content with Gemini API."
@@ -1298,7 +1298,7 @@ async def analyze(
         try:
             response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img])
             response.resolve()
-            gemini_response_neg = response.text
+            gemini_response_neg = format_text(response.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg = "Error: Failed to generate content with Gemini API."
@@ -1338,7 +1338,7 @@ async def analyze(
         try:
             response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img1])
             response1.resolve()
-            gemini_response_pos1 = response1.text
+            gemini_response_pos1 = format_text(response1.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_pos1 = "Error: Failed to generate content with Gemini API."
@@ -1364,7 +1364,7 @@ async def analyze(
         try:
             response2 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img2])
             response2.resolve()
-            gemini_response_neu1 = response2.text
+            gemini_response_neu1 = format_text(response2.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neu1 = "Error: Failed to generate content with Gemini API."
@@ -1390,7 +1390,7 @@ async def analyze(
         try:
             response3 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img3])
             response3.resolve()
-            gemini_response_neg1 = response3.text
+            gemini_response_neg1 = format_text(response3.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg1 = "Error: Failed to generate content with Gemini API."
@@ -1437,7 +1437,7 @@ async def analyze(
         try:
             response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img1])
             response1.resolve()
-            gemini_response_pos2 = response1.text
+            gemini_response_pos2 = format_text(response1.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_pos2 = "Error: Failed to generate content with Gemini API."
@@ -1472,7 +1472,7 @@ async def analyze(
         try:
             response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img1])
             response1.resolve()
-            gemini_response_neu2 = response1.text
+            gemini_response_neu2 = format_text(response1.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neu2 = "Error: Failed to generate content with Gemini API."
@@ -1508,7 +1508,7 @@ async def analyze(
         try:
             response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img1])
             response1.resolve()
-            gemini_response_neg2 = response1.text
+            gemini_response_neg2 = format_text(response1.text)
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg2 = "Error: Failed to generate content with Gemini API."
