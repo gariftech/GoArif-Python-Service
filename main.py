@@ -48,7 +48,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_google_genai import ChatGoogleGenerativeAI
-
+import tempfile
 
 from fastapi import FastAPI, File, UploadFile, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -95,8 +95,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_google_genai import ChatGoogleGenerativeAI
 from fastapi.middleware.cors import CORSMiddleware
+import requests
+from typing import List
 
 app = FastAPI()
+
+headers = {'Content-Type': 'application/octet-stream'}
 
 if os.getenv("FASTAPI_ENV") == "development":
     nest_asyncio.apply()
@@ -277,7 +281,7 @@ async def analyze_document(
         elif file_extension == ".csv":
             loader = UnstructuredCSVLoader(uploaded_file_path, mode="elements", encoding="utf8")
         elif file_extension == ".xlsx":
-            loader = UnstructuredExcelLoader(uploaded_file_path, mode="elements")
+            loader = UnstructuredExcelLoader(uploaded_file_path)
         elif file_extension == ".docx":
             loader = Docx2txtLoader(uploaded_file_path)
         elif file_extension == ".pptx":
@@ -298,8 +302,27 @@ async def analyze_document(
 
         docs = loader.load()
         prompt_template = PromptTemplate.from_template(
-            f"{prompt} text: {{text}}"
+            f"""
+            You are an expert at analyzing and interpreting information. Below is the provided content:
+
+            {{text}}
+
+            Instructions:
+            1. Carefully analyze the provided content and identify key numerical data and their corresponding attributes.
+            2. If the question asks for specific comparisons like "highest," "lowest," or other numerical operations:
+            - First, identify all relevant numerical values in the data (e.g., sales prices, quantities, dates).
+            - Then, compare these values and determine the highest, lowest, or any other metric requested by the question.
+            - For example, if the question asks for the highest value, identify the highest number and return the corresponding data (e.g., "Order ID with the highest sale price").
+            - If the question asks for a total or sum, calculate that from the relevant data.
+            3. If the question asks for a summary:
+            - Provide a concise and clear summary of the most important information from the data, ensuring it includes key figures or findings from the data.
+
+            Question: {prompt}
+
+            Provide only the final answer in your response, based on the data analysis.
+            """
         )
+
         llm_chain = LLMChain(llm=llm, prompt=prompt_template)
         stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
         response = stuff_chain.invoke(docs)
@@ -465,6 +488,9 @@ question_responses = []
 
 
 
+
+
+
 def format_text(text):
     # Replace **text** with <b>text</b>
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
@@ -606,27 +632,21 @@ async def result(api_key: str = Form(...),
     uploaded_filename = secure_filename(file.filename)
     file_path = os.path.join("static", uploaded_filename)
 
+    # Save the uploaded file
     with open(file_path, 'wb') as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Example: Assuming uploaded_filename and file_path are provided
+    # Read the file depending on the extension
     if uploaded_filename.endswith('.csv'):
         df = pd.read_csv(file_path)
-        # Convert CSV file content to base64 string
-        with open(file_path, "rb") as csv_file:
-            file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
-
     elif uploaded_filename.endswith('.xlsx'):
         df = pd.read_excel(file_path)
-        # Convert Excel file content to base64 string
-        with open(file_path, "rb") as excel_file:
-            file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
-
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format")
-    
+
     columns = df.columns.tolist()
 
+    # Function to generate Gemini response based on the plot
     def generate_gemini_response(plot_path):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
@@ -641,18 +661,19 @@ async def result(api_key: str = Form(...),
         plot2_path = generate_plot(df, 'static/plot2.png', 'histplot')
 
         # Generate Gemini responses
-        response1 = format_text(generate_gemini_response(plot1_path))
-        response2 = format_text(generate_gemini_response(plot2_path))
+        response1 = generate_gemini_response(plot1_path)
+        response2 = generate_gemini_response(plot2_path)
 
         uploaded_df = df
 
-        # Convert plots to base64 strings
-        with open(plot1_path, "rb") as image_file:
-            plot1_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        with open(plot2_path, "rb") as image_file:
-            plot2_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-
         # Generate PDF
+
+        def safe_encode(text):
+            try:
+                return text.encode('latin1', errors='replace').decode('latin1')  # Replace invalid characters
+            except Exception as e:
+                return f"Error encoding text: {str(e)}"
+            
         pdf = FPDF()
         pdf.set_font("Arial", size=12)
 
@@ -662,7 +683,7 @@ async def result(api_key: str = Form(...),
         pdf.add_page()
         pdf.cell(200, 10, txt="Single Countplot Barchart Google Gemini Response", ln=True, align='C')
         pdf.ln(10)
-        pdf.multi_cell(0, 10, response1)
+        pdf.multi_cell(0, 10, safe_encode(response1))
 
         pdf.add_page()
         pdf.cell(200, 10, txt="Single Histoplot", ln=True, align='C')
@@ -670,28 +691,75 @@ async def result(api_key: str = Form(...),
         pdf.add_page()
         pdf.cell(200, 10, txt="Single Histoplot Google Gemini Response", ln=True, align='C')
         pdf.ln(10)
-        pdf.multi_cell(0, 10, response2)
+        pdf.multi_cell(0, 10, safe_encode(response2))
 
         pdf_file_path = os.path.join("static", "output.pdf")
         pdf.output(pdf_file_path)
 
-        # Convert PDF to base64
-        with open(pdf_file_path, "rb") as pdf_file:
-            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
+        # Upload files to external endpoint
+        api_url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
 
-        # Return the response
+        with open(plot1_path, "rb") as plot1, open(plot2_path, "rb") as plot2, \
+            open(pdf_file_path, "rb") as pdf, open(file_path, "rb") as uploaded_file:
+
+            # Use appropriate field names for the API
+            files = {
+                "file": ("uploaded_file.csv", uploaded_file, "application/octet-stream"),  # The main uploaded file
+                "plot1": ("plot1.png", plot1, "image/png"),  # Attach additional files
+                "plot2": ("plot2.png", plot2, "image/png"),
+                "report": ("output.pdf", pdf, "application/pdf"),
+            }
+
+            try:
+                # Log request for debugging
+                print("Sending request to:", api_url)
+                print("Files:", files.keys())
+
+                # Send the POST request
+                response = requests.post(api_url, files=files)
+
+                # Log response details
+                print("Response Status Code:", response.status_code)
+                print("Response Text:", response.text)
+
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail=f"Error from API: {response.text}")
+
+                # Attempt to parse the response as JSON
+                try:
+                    upload_response = response.json()
+                except ValueError:
+                    upload_response = {"message": response.text or "No content returned"}
+
+                # Extract file URLs
+                uploaded_file_url = upload_response.get("file_url", f"{api_url}/{uploaded_filename}")
+                plot1_url = upload_response.get("plot1_url", f"{api_url}/{os.path.basename(plot1_path)}")
+                plot2_url = upload_response.get("plot2_url", f"{api_url}/{os.path.basename(plot2_path)}")
+                pdf_url = upload_response.get("pdf_url", f"{api_url}/output.pdf")
+
+            except requests.exceptions.RequestException as e:
+                raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+
+        # Return the response with data and the upload result
         return AnalyzeDocument1Response(
-            meta={"status": "success", "code": 200},
-            plot1_path=plot1_bytes,
+            meta={
+                "status": "success", 
+                "code": 200, 
+            },
+            file_path=uploaded_file_url,
+            plot1_path=plot1_url,
+            plot2_path=plot2_url,
+            pdf_file_path=pdf_url,
             response1=response1,
-            plot2_path=plot2_bytes,
             response2=response2,
-            pdf_file_path=pdf_bytes,
-            file_path=file_bytes,  # CSV as base64 string
             columns=", ".join(columns)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 
 
@@ -713,17 +781,11 @@ async def multiclass(
             # Load CSV file into DataFrame
             df = pd.read_csv(file.file, encoding='utf-8')
             
-            # Convert CSV file content to base64 string
-            file.file.seek(0)  # Reset file pointer to the beginning
-            file_bytes = base64.b64encode(file.file.read()).decode('utf-8')
 
         elif file.filename.endswith('.xlsx'):
             # Load Excel file into DataFrame
             df = pd.read_excel(file.file)
             
-            # Convert Excel file content to base64 string
-            file.file.seek(0)  # Reset file pointer to the beginning
-            file_bytes = base64.b64encode(file.file.read()).decode('utf-8')
 
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format")
@@ -842,13 +904,6 @@ async def multiclass(
 
         document_analyzed = True
 
-
-        # Convert plots to base64 strings
-        with open(plot3_path, "rb") as image_file:
-            plot3_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        with open(plot4_path, "rb") as image_file:
-            plot4_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-
         # Create a dictionary to store the outputs
         outputs = {
             "multiBarchart_visualization": plot3_path,
@@ -894,18 +949,63 @@ async def multiclass(
         pdf.output(pdf_output_path)
         pdf_file_path = pdf_output_path.replace("\\", "/")
 
-        # Convert PDF to base64
-        with open(pdf_file_path, "rb") as pdf_file:
-            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
+
+
+        uploaded_filename = secure_filename(file.filename)
+        file_path = os.path.join("static", uploaded_filename)
+        # Upload files to external endpoint
+        api_url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+
+        with open(plot3_path, "rb") as plot1, open(plot4_path, "rb") as plot2, \
+            open(pdf_file_path, "rb") as pdf, open(file_path, "rb") as uploaded_file:
+
+            # Use appropriate field names for the API
+            files = {
+                "file": ("uploaded_file.csv", uploaded_file, "application/octet-stream"),  # The main uploaded file
+                "plot3": ("multiclass_barplot.png", plot1, "image/png"),  # Attach additional files
+                "plot4": ("multiclass_histplot.png", plot2, "image/png"),
+                "report": ("output.pdf", pdf, "application/pdf"),
+            }
+
+            try:
+                # Log request for debugging
+                print("Sending request to:", api_url)
+                print("Files:", files.keys())
+
+                # Send the POST request
+                response = requests.post(api_url, files=files)
+
+                # Log response details
+                print("Response Status Code:", response.status_code)
+                print("Response Text:", response.text)
+
+                if response.status_code != 200:
+                    raise HTTPException(status_code=response.status_code, detail=f"Error from API: {response.text}")
+
+                # Attempt to parse the response as JSON
+                try:
+                    upload_response = response.json()
+                except ValueError:
+                    upload_response = {"message": response.text or "No content returned"}
+
+                # Extract file URLs
+                uploaded_file_url = upload_response.get("file_url", f"{api_url}/{uploaded_filename}")
+                plot3_url = upload_response.get("plot3_url", f"{api_url}/{os.path.basename(plot3_path)}")
+                plot4_url = upload_response.get("plot4_url", f"{api_url}/{os.path.basename(plot4_path)}")
+                pdf_url = upload_response.get("pdf_url", f"{api_url}/static/analysis_report_complete.pdf")
+
+            except requests.exceptions.RequestException as e:
+                raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
 
         return MulticlassResponse(
             meta={"status": "success", "code": 200},
-            plot3_path=plot3_bytes,
-            plot4_path=plot4_bytes,
+            plot3_path=plot3_url,
+            plot4_path=plot4_url,
             response3=response3,
             response4=response4,
-            pdf_file_path=pdf_bytes,
-            file_path=file_bytes
+            pdf_file_path=pdf_url,
+            file_path=uploaded_file_url
         )
 
     except Exception as e:
@@ -1075,8 +1175,38 @@ emoticon_pattern = re.compile(u'('
 async def process_file(request: Request, file: UploadFile = File(...)):
     global df
     file_location = f"static/{file.filename}"
+    base_url = "http://127.0.0.1:9000"  # Replace with your server's actual base URL
+    file_url = f"{base_url}/static/{file.filename}"  # Construct the file URL
+
+    # Save the uploaded file to the static directory
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Upload the file to the external endpoint (httpbin.org)
+    api_url = "https://httpbin.org/post"  # Using httpbin.org as the API URL
+    try:
+        with open(file_location, "rb") as uploaded_file:
+            files = {
+                "file": (file.filename, uploaded_file, "application/octet-stream")
+            }
+            response = requests.post(api_url, files=files)
+        
+        # Handle the API response
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        
+        # Parse the response as JSON
+        try:
+            upload_response = response.json()
+        except ValueError:
+            upload_response = {"message": response.text}
+
+        # Construct the external file URL based on the response
+        # httpbin will echo back the file and metadata, so we can use the filename as part of the URL
+        uploaded_file_url = f"https://httpbin.org/post/{file.filename}"
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Load DataFrame based on file type
     file_extension = os.path.splitext(file.filename)[1]
@@ -1084,19 +1214,9 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         if file_extension == '.csv':
             # Load CSV file into DataFrame
             df = pd.read_csv(file_location, delimiter=",")
-            
-            # Convert CSV file content to base64 string
-            with open(file_location, "rb") as csv_file:
-                file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
-
         elif file_extension in ['.xls', '.xlsx']:
             # Load Excel file into DataFrame
             df = pd.read_excel(file_location)
-            
-            # Convert Excel file content to base64 string
-            with open(file_location, "rb") as excel_file:
-                file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
-
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
@@ -1106,7 +1226,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         return GetColumn(
             meta={"status": "success", "code": 200},
             columns=", ".join(columns),
-            file_path=file_bytes
+            file_path=uploaded_file_url  # Return the external file URL
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1642,44 +1762,113 @@ async def analyze(
         pdf.ln(10)
         pdf.multi_cell(0, 10, safe_encode(gemini_response_neg2))
         
-        pdf_file_path = os.path.join("static", "output.pdf")
+        pdf_file_path = os.path.join("static", "sentiment.pdf")
         pdf.output(pdf_file_path)
 
-        pdf_file_path = os.path.join("static", "output.pdf")
+        pdf_file_path = os.path.join("static", "sentiment.pdf")
         pdf_file_path = pdf_file_path.replace("\\", "/")
 
         # Convert PDF to base64
         with open(pdf_file_path, "rb") as pdf_file:
             pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
+
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file.write(file.file.read())
+            temp_file_path = temp_file.name
+
+        # Upload files to external endpoint
+        api_url = "https://httpbin.org/post"
+        file_name = file.filename
+
+        # Open all the files in binary mode
+        with open(sentiment_plot_path, "rb") as plot1, open(topic_plot_path, "rb") as plot2, \
+            open(topic_plot_path1, "rb") as plot3, open(topic_plot_path2, "rb") as plot4, \
+            open(wordcloud_positive, "rb") as plot5, open(wordcloud_neutral, "rb") as plot6, \
+            open(wordcloud_negative, "rb") as plot7, open(bigram_positive, "rb") as plot8, \
+            open(bigram_neutral, "rb") as plot9, open(bigram_negative, "rb") as plot10, \
+            open(unigram_positive, "rb") as plot11, open(unigram_neutral, "rb") as plot12, \
+            open(unigram_negative, "rb") as plot13, open(pdf_file_path, "rb") as pdf, \
+            open(temp_file_path, "rb") as uploaded_file:
+            
+            # Prepare the files dictionary for the POST request
+            files = {
+                "file1": ("plot1.png", plot1, "image/png"),
+                "file2": ("plot2.png", plot2, "image/png"),
+                "file3": ("plot3.png", plot3, "image/png"),
+                "file4": ("plot4.png", plot4, "image/png"),
+                "file5": ("wordcloud_positive.png", plot5, "image/png"),
+                "file6": ("wordcloud_neutral.png", plot6, "image/png"),
+                "file7": ("wordcloud_negative.png", plot7, "image/png"),
+                "file8": ("bigram_positive.png", plot8, "image/png"),
+                "file9": ("bigram_neutral.png", plot9, "image/png"),
+                "file10": ("bigram_negative.png", plot10, "image/png"),
+                "file11": ("unigram_positive.png", plot11, "image/png"),
+                "file12": ("unigram_neutral.png", plot12, "image/png"),
+                "file13": ("unigram_negative.png", plot13, "image/png"),
+                "file14": ("sentiment.pdf", pdf, "application/pdf"),
+                "file15": (file_name, uploaded_file, "application/octet-stream"),
+            }
+
+            # Send the POST request with the files
+            response = requests.post(api_url, files=files)
+
+        # Handle the API response
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+
+        # Attempt to parse the response as JSON
+        try:
+            upload_response = response.json()
+        except ValueError:
+            upload_response = {"message": response.text}
+
+        # Construct URLs for the uploaded files (using the filename and the response)
+        file_url = f"https://httpbin.org/post/{file_name}"
+        sentiment_url = f"https://httpbin.org/post/{os.path.basename(sentiment_plot_path)}"
+        topic_plot_url1 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path)}"
+        topic_plot_url2 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path1)}"
+        topic_plot_url3 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path2)}"
+        wordcloud_positive_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_positive)}"
+        wordcloud_neutral_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_neutral)}"
+        wordcloud_negative_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_negative)}"
+        bigram_positive_url = f"https://httpbin.org/post/{os.path.basename(bigram_positive)}"
+        bigram_neutral_url = f"https://httpbin.org/post/{os.path.basename(bigram_neutral)}"
+        bigram_negative_url = f"https://httpbin.org/post/{os.path.basename(bigram_negative)}"
+        unigram_positive_url = f"https://httpbin.org/post/{os.path.basename(unigram_positive)}"
+        unigram_neutral_url = f"https://httpbin.org/post/{os.path.basename(unigram_neutral)}"
+        unigram_negative_url = f"https://httpbin.org/post/{os.path.basename(unigram_negative)}"
+        pdf_url = f"https://httpbin.org/post/sentiment.pdf"
         
 
         return AnalyzeDocumentResponse2(
-                    meta={"status": "success", "code": 200},
-                    sentiment_plot_path=sentiment_plot_bytes,
-                    topic_plot_path=topic_plot_bytes, 
-                    topic_plot_path1=topic_plot1_bytes,
-                    topic_plot_path2=topic_plot2_bytes, 
-                    wordcloud_positive=wordcloud_positive_bytes,
-                    gemini_response_pos= gemini_response_pos,
-                    wordcloud_neutral=wordcloud_neutral_bytes, 
-                    gemini_response_neu= gemini_response_neu,
-                    wordcloud_negative=wordcloud_negative_bytes,
-                    gemini_response_neg= gemini_response_neg,
-                    bigram_positive=bigram_positive_bytes, 
-                    gemini_response_pos1= gemini_response_pos1,
-                    bigram_neutral=bigram_neutral_bytes, 
-                    gemini_response_neu1= gemini_response_neu1,
-                    bigram_negative=bigram_negative_bytes,
-                    gemini_response_neg1= gemini_response_neg1,
-                    unigram_positive= unigram_positive_bytes,
-                    gemini_response_pos2= gemini_response_pos2,
-                    unigram_neutral= unigram_neutral_bytes,
-                    gemini_response_neu2= gemini_response_neu2,
-                    unigram_negative= unigram_negative_bytes,
-                    gemini_response_neg2= gemini_response_neg2,
-                    pdf_file_path=pdf_bytes,
-                    file_path=file_bytes
-            )
+            meta={"status": "success", "code": 200},
+            sentiment_plot_path=sentiment_url,
+            topic_plot_path=topic_plot_url1,
+            topic_plot_path1=topic_plot_url2,
+            topic_plot_path2=topic_plot_url3,
+            wordcloud_positive=wordcloud_positive_url,
+            gemini_response_pos=gemini_response_pos,
+            wordcloud_neutral=wordcloud_neutral_url,
+            gemini_response_neu=gemini_response_neu,
+            wordcloud_negative=wordcloud_negative_url,
+            gemini_response_neg=gemini_response_neg,
+            bigram_positive=bigram_positive_url,
+            gemini_response_pos1=gemini_response_pos1,
+            bigram_neutral=bigram_neutral_url,
+            gemini_response_neu1=gemini_response_neu1,
+            bigram_negative=bigram_negative_url,
+            gemini_response_neg1=gemini_response_neg1,
+            unigram_positive=unigram_positive_url,
+            gemini_response_pos2=gemini_response_pos2,
+            unigram_neutral=unigram_neutral_url,
+            gemini_response_neu2=gemini_response_neu2,
+            unigram_negative=unigram_negative_url,
+            gemini_response_neg2=gemini_response_neg2,
+            pdf_file_path=pdf_url,
+            file_path=file_url
+        )
+
 
     except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
