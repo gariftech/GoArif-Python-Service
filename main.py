@@ -667,7 +667,6 @@ async def result(api_key: str = Form(...),
         uploaded_df = df
 
         # Generate PDF
-
         def safe_encode(text):
             try:
                 return text.encode('latin1', errors='replace').decode('latin1')  # Replace invalid characters
@@ -697,49 +696,23 @@ async def result(api_key: str = Form(...),
         pdf.output(pdf_file_path)
 
         # Upload files to external endpoint
-        api_url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
 
-        with open(plot1_path, "rb") as plot1, open(plot2_path, "rb") as plot2, \
-            open(pdf_file_path, "rb") as pdf, open(file_path, "rb") as uploaded_file:
+        # Upload CSV
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
-            # Use appropriate field names for the API
-            files = {
-                "file": ("uploaded_file.csv", uploaded_file, "application/octet-stream"),  # The main uploaded file
-                "plot1": ("plot1.png", plot1, "image/png"),  # Attach additional files
-                "plot2": ("plot2.png", plot2, "image/png"),
-                "report": ("output.pdf", pdf, "application/pdf"),
-            }
+        # Upload Plot1
+        with open(plot1_path, "rb") as f:
+            plot1_url = requests.post(url, files={"file": ("plot1.png", f, "image/png")})
 
-            try:
-                # Log request for debugging
-                print("Sending request to:", api_url)
-                print("Files:", files.keys())
+        # Upload Plot2
+        with open(plot2_path, "rb") as f:
+            plot2_url = requests.post(url, files={"file": ("plot2.png", f, "image/png")})
 
-                # Send the POST request
-                response = requests.post(api_url, files=files)
-
-                # Log response details
-                print("Response Status Code:", response.status_code)
-                print("Response Text:", response.text)
-
-                if response.status_code != 200:
-                    raise HTTPException(status_code=response.status_code, detail=f"Error from API: {response.text}")
-
-                # Attempt to parse the response as JSON
-                try:
-                    upload_response = response.json()
-                except ValueError:
-                    upload_response = {"message": response.text or "No content returned"}
-
-                # Extract file URLs
-                uploaded_file_url = upload_response.get("file_url", f"{api_url}/{uploaded_filename}")
-                plot1_url = upload_response.get("plot1_url", f"{api_url}/{os.path.basename(plot1_path)}")
-                plot2_url = upload_response.get("plot2_url", f"{api_url}/{os.path.basename(plot2_path)}")
-                pdf_url = upload_response.get("pdf_url", f"{api_url}/output.pdf")
-
-            except requests.exceptions.RequestException as e:
-                raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
-
+        # Upload PDF
+        with open(pdf_file_path, "rb") as f:
+            pdf_url = requests.post(url, files={"file": ("output.pdf", f, "application/pdf")})
 
         # Return the response with data and the upload result
         return AnalyzeDocument1Response(
@@ -747,16 +720,17 @@ async def result(api_key: str = Form(...),
                 "status": "success", 
                 "code": 200, 
             },
-            file_path=uploaded_file_url,
-            plot1_path=plot1_url,
-            plot2_path=plot2_url,
-            pdf_file_path=pdf_url,
+            file_path=uploaded_file_url.text,
+            plot1_path=plot1_url.text,
+            plot2_path=plot2_url.text,
+            pdf_file_path=pdf_url.text,
             response1=response1,
             response2=response2,
             columns=", ".join(columns)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
@@ -953,59 +927,39 @@ async def multiclass(
 
         uploaded_filename = secure_filename(file.filename)
         file_path = os.path.join("static", uploaded_filename)
+
+        # Save the uploaded file
+        with open(file_path, 'wb') as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
         # Upload files to external endpoint
-        api_url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
 
-        with open(plot3_path, "rb") as plot1, open(plot4_path, "rb") as plot2, \
-            open(pdf_file_path, "rb") as pdf, open(file_path, "rb") as uploaded_file:
+        # Upload CSV
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
-            # Use appropriate field names for the API
-            files = {
-                "file": ("uploaded_file.csv", uploaded_file, "application/octet-stream"),  # The main uploaded file
-                "plot3": ("multiclass_barplot.png", plot1, "image/png"),  # Attach additional files
-                "plot4": ("multiclass_histplot.png", plot2, "image/png"),
-                "report": ("output.pdf", pdf, "application/pdf"),
-            }
+        # Upload Plot1
+        with open(plot3_path, "rb") as f:
+            plot3_url = requests.post(url, files={"file": ("multiclass_barplot.png", f, "image/png")})
 
-            try:
-                # Log request for debugging
-                print("Sending request to:", api_url)
-                print("Files:", files.keys())
+        # Upload Plot2
+        with open(plot4_path, "rb") as f:
+            plot4_url = requests.post(url, files={"file": ("multiclass_histplot.png", f, "image/png")})
 
-                # Send the POST request
-                response = requests.post(api_url, files=files)
-
-                # Log response details
-                print("Response Status Code:", response.status_code)
-                print("Response Text:", response.text)
-
-                if response.status_code != 200:
-                    raise HTTPException(status_code=response.status_code, detail=f"Error from API: {response.text}")
-
-                # Attempt to parse the response as JSON
-                try:
-                    upload_response = response.json()
-                except ValueError:
-                    upload_response = {"message": response.text or "No content returned"}
-
-                # Extract file URLs
-                uploaded_file_url = upload_response.get("file_url", f"{api_url}/{uploaded_filename}")
-                plot3_url = upload_response.get("plot3_url", f"{api_url}/{os.path.basename(plot3_path)}")
-                plot4_url = upload_response.get("plot4_url", f"{api_url}/{os.path.basename(plot4_path)}")
-                pdf_url = upload_response.get("pdf_url", f"{api_url}/static/analysis_report_complete.pdf")
-
-            except requests.exceptions.RequestException as e:
-                raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+        # Upload PDF
+        with open(pdf_file_path, "rb") as f:
+            pdf_url = requests.post(url, files={"file": ("analysis_report_complete.pdf", f, "application/pdf")})
 
 
         return MulticlassResponse(
             meta={"status": "success", "code": 200},
-            plot3_path=plot3_url,
-            plot4_path=plot4_url,
+            plot3_path=plot3_url.text,
+            plot4_path=plot4_url.text,
             response3=response3,
             response4=response4,
-            pdf_file_path=pdf_url,
-            file_path=uploaded_file_url
+            pdf_file_path=pdf_url.text,
+            file_path=uploaded_file_url.text
         )
 
     except Exception as e:
@@ -1173,60 +1127,40 @@ emoticon_pattern = re.compile(u'('
 
 @app.post("/py/v1/process", response_model=GetColumn)
 async def process_file(request: Request, file: UploadFile = File(...)):
-    global df
-    file_location = f"static/{file.filename}"
-    base_url = "http://127.0.0.1:9000"  # Replace with your server's actual base URL
-    file_url = f"{base_url}/static/{file.filename}"  # Construct the file URL
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
 
-    # Save the uploaded file to the static directory
-    with open(file_location, "wb") as buffer:
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
         shutil.copyfileobj(file.file, buffer)
-
-    # Upload the file to the external endpoint (httpbin.org)
-    api_url = "https://httpbin.org/post"  # Using httpbin.org as the API URL
-    try:
-        with open(file_location, "rb") as uploaded_file:
-            files = {
-                "file": (file.filename, uploaded_file, "application/octet-stream")
-            }
-            response = requests.post(api_url, files=files)
-        
-        # Handle the API response
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        
-        # Parse the response as JSON
-        try:
-            upload_response = response.json()
-        except ValueError:
-            upload_response = {"message": response.text}
-
-        # Construct the external file URL based on the response
-        # httpbin will echo back the file and metadata, so we can use the filename as part of the URL
-        uploaded_file_url = f"https://httpbin.org/post/{file.filename}"
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
     # Load DataFrame based on file type
     file_extension = os.path.splitext(file.filename)[1]
     try:
         if file_extension == '.csv':
             # Load CSV file into DataFrame
-            df = pd.read_csv(file_location, delimiter=",")
+            df = pd.read_csv(file_path, delimiter=",")
         elif file_extension in ['.xls', '.xlsx']:
             # Load Excel file into DataFrame
-            df = pd.read_excel(file_location)
+            df = pd.read_excel(file_path)
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
         # Get columns of the DataFrame
         columns = df.columns.tolist()
 
+        # Upload CSV
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+
         return GetColumn(
             meta={"status": "success", "code": 200},
             columns=", ".join(columns),
-            file_path=uploaded_file_url  # Return the external file URL
+            file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1346,15 +1280,7 @@ async def analyze(
         topic_plot_path2 = 'static/dist.png'
 
 
-        # Convert plots to base64 strings
-        with open(topic_plot_path, "rb") as image_file:
-            topic_plot_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(topic_plot_path1, "rb") as image_file:
-            topic_plot1_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(topic_plot_path2, "rb") as image_file:
-            topic_plot2_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        
         
 
         # Generate sentiment analysis results table
@@ -1768,105 +1694,104 @@ async def analyze(
         pdf_file_path = os.path.join("static", "sentiment.pdf")
         pdf_file_path = pdf_file_path.replace("\\", "/")
 
-        # Convert PDF to base64
-        with open(pdf_file_path, "rb") as pdf_file:
-            pdf_bytes = base64.b64encode(pdf_file.read()).decode('utf-8')
+       
+        uploaded_filename = secure_filename(file.filename)
+        file_path = os.path.join("static", uploaded_filename)
 
-
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file.write(file.file.read())
-            temp_file_path = temp_file.name
-
-        # Upload files to external endpoint
-        api_url = "https://httpbin.org/post"
-        file_name = file.filename
-
-        # Open all the files in binary mode
-        with open(sentiment_plot_path, "rb") as plot1, open(topic_plot_path, "rb") as plot2, \
-            open(topic_plot_path1, "rb") as plot3, open(topic_plot_path2, "rb") as plot4, \
-            open(wordcloud_positive, "rb") as plot5, open(wordcloud_neutral, "rb") as plot6, \
-            open(wordcloud_negative, "rb") as plot7, open(bigram_positive, "rb") as plot8, \
-            open(bigram_neutral, "rb") as plot9, open(bigram_negative, "rb") as plot10, \
-            open(unigram_positive, "rb") as plot11, open(unigram_neutral, "rb") as plot12, \
-            open(unigram_negative, "rb") as plot13, open(pdf_file_path, "rb") as pdf, \
-            open(temp_file_path, "rb") as uploaded_file:
+        # Save the uploaded file
+        with open(file_path, 'wb') as buffer:
+            shutil.copyfileobj(file.file, buffer)
             
-            # Prepare the files dictionary for the POST request
-            files = {
-                "file1": ("plot1.png", plot1, "image/png"),
-                "file2": ("plot2.png", plot2, "image/png"),
-                "file3": ("plot3.png", plot3, "image/png"),
-                "file4": ("plot4.png", plot4, "image/png"),
-                "file5": ("wordcloud_positive.png", plot5, "image/png"),
-                "file6": ("wordcloud_neutral.png", plot6, "image/png"),
-                "file7": ("wordcloud_negative.png", plot7, "image/png"),
-                "file8": ("bigram_positive.png", plot8, "image/png"),
-                "file9": ("bigram_neutral.png", plot9, "image/png"),
-                "file10": ("bigram_negative.png", plot10, "image/png"),
-                "file11": ("unigram_positive.png", plot11, "image/png"),
-                "file12": ("unigram_neutral.png", plot12, "image/png"),
-                "file13": ("unigram_negative.png", plot13, "image/png"),
-                "file14": ("sentiment.pdf", pdf, "application/pdf"),
-                "file15": (file_name, uploaded_file, "application/octet-stream"),
-            }
+        # Upload files to external endpoint
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
 
-            # Send the POST request with the files
-            response = requests.post(api_url, files=files)
+        # Upload CSV
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+        
+        # Upload Plot1
+        with open(sentiment_plot_path, "rb") as f:
+            sentiment_url = requests.post(url, files={"file": ("sentiment_distribution.png", f, "image/png")})
 
-        # Handle the API response
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+        # Upload Plot1
+        with open(topic_plot_path, "rb") as f:
+            topic_plot_url1 = requests.post(url, files={"file": ("barchart.png", f, "image/png")})
 
-        # Attempt to parse the response as JSON
-        try:
-            upload_response = response.json()
-        except ValueError:
-            upload_response = {"message": response.text}
+        # Upload Plot2
+        with open(topic_plot_path1, "rb") as f:
+            topic_plot_url2 = requests.post(url, files={"file": ("hierarchy.png", f, "image/png")})
+        
+        # Upload Plot2
+        with open(topic_plot_path2, "rb") as f:
+            topic_plot_url3 = requests.post(url, files={"file": ("dist.png", f, "image/png")})
+        
+        # Upload wordcloud
+        with open(wordcloud_positive, "rb") as f:
+            wordcloud_positive_url = requests.post(url, files={"file": ("wordcloud_positive.png", f, "image/png")})
 
-        # Construct URLs for the uploaded files (using the filename and the response)
-        file_url = f"https://httpbin.org/post/{file_name}"
-        sentiment_url = f"https://httpbin.org/post/{os.path.basename(sentiment_plot_path)}"
-        topic_plot_url1 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path)}"
-        topic_plot_url2 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path1)}"
-        topic_plot_url3 = f"https://httpbin.org/post/{os.path.basename(topic_plot_path2)}"
-        wordcloud_positive_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_positive)}"
-        wordcloud_neutral_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_neutral)}"
-        wordcloud_negative_url = f"https://httpbin.org/post/{os.path.basename(wordcloud_negative)}"
-        bigram_positive_url = f"https://httpbin.org/post/{os.path.basename(bigram_positive)}"
-        bigram_neutral_url = f"https://httpbin.org/post/{os.path.basename(bigram_neutral)}"
-        bigram_negative_url = f"https://httpbin.org/post/{os.path.basename(bigram_negative)}"
-        unigram_positive_url = f"https://httpbin.org/post/{os.path.basename(unigram_positive)}"
-        unigram_neutral_url = f"https://httpbin.org/post/{os.path.basename(unigram_neutral)}"
-        unigram_negative_url = f"https://httpbin.org/post/{os.path.basename(unigram_negative)}"
-        pdf_url = f"https://httpbin.org/post/sentiment.pdf"
+        # Upload Plot2
+        with open(wordcloud_neutral, "rb") as f:
+            wordcloud_neutral_url = requests.post(url, files={"file": ("wordcloud_neutral.png", f, "image/png")})
+        
+        # Upload Plot2
+        with open(wordcloud_negative, "rb") as f:
+            wordcloud_negative_url = requests.post(url, files={"file": ("wordcloud_negative.png", f, "image/png")})
+
+        # Upload bigram
+        with open(bigram_positive, "rb") as f:
+            bigram_positive_url = requests.post(url, files={"file": ("bigram_positive.png", f, "image/png")})
+
+        # Upload Plot2
+        with open(bigram_neutral, "rb") as f:
+            bigram_neutral_url = requests.post(url, files={"file": ("bigram_neutral.png", f, "image/png")})
+        
+        # Upload Plot2
+        with open(bigram_negative, "rb") as f:
+            bigram_negative_url = requests.post(url, files={"file": ("bigram_negative.png", f, "image/png")})
+        
+         # Upload unigram
+        with open(unigram_positive, "rb") as f:
+            unigram_positive_url = requests.post(url, files={"file": ("unigram_positive.png", f, "image/png")})
+
+        # Upload Plot2
+        with open(unigram_neutral, "rb") as f:
+            unigram_neutral_url = requests.post(url, files={"file": ("unigram_neutral.png", f, "image/png")})
+        
+        # Upload Plot2
+        with open(unigram_negative, "rb") as f:
+            unigram_negative_url = requests.post(url, files={"file": ("unigram_negative.png", f, "image/png")})
+
+        # Upload PDF
+        with open(pdf_file_path, "rb") as f:
+            pdf_url = requests.post(url, files={"file": ("sentiment.pdf", f, "application/pdf")})
         
 
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
-            sentiment_plot_path=sentiment_url,
-            topic_plot_path=topic_plot_url1,
-            topic_plot_path1=topic_plot_url2,
-            topic_plot_path2=topic_plot_url3,
-            wordcloud_positive=wordcloud_positive_url,
+            sentiment_plot_path=sentiment_url.text,
+            topic_plot_path=topic_plot_url1.text,
+            topic_plot_path1=topic_plot_url2.text,
+            topic_plot_path2=topic_plot_url3.text,
+            wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
-            wordcloud_neutral=wordcloud_neutral_url,
+            wordcloud_neutral=wordcloud_neutral_url.text,
             gemini_response_neu=gemini_response_neu,
-            wordcloud_negative=wordcloud_negative_url,
+            wordcloud_negative=wordcloud_negative_url.text,
             gemini_response_neg=gemini_response_neg,
-            bigram_positive=bigram_positive_url,
+            bigram_positive=bigram_positive_url.text,
             gemini_response_pos1=gemini_response_pos1,
-            bigram_neutral=bigram_neutral_url,
+            bigram_neutral=bigram_neutral_url.text,
             gemini_response_neu1=gemini_response_neu1,
-            bigram_negative=bigram_negative_url,
+            bigram_negative=bigram_negative_url.text,
             gemini_response_neg1=gemini_response_neg1,
-            unigram_positive=unigram_positive_url,
+            unigram_positive=unigram_positive_url.text,
             gemini_response_pos2=gemini_response_pos2,
-            unigram_neutral=unigram_neutral_url,
+            unigram_neutral=unigram_neutral_url.text,
             gemini_response_neu2=gemini_response_neu2,
-            unigram_negative=unigram_negative_url,
+            unigram_negative=unigram_negative_url.text,
             gemini_response_neg2=gemini_response_neg2,
-            pdf_file_path=pdf_url,
-            file_path=file_url
+            pdf_file_path=pdf_url.text,
+            file_path=uploaded_file_url.text
         )
 
 
