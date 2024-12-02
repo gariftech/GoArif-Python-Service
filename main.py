@@ -1179,8 +1179,14 @@ async def analyze(
     global df
     # Read the uploaded CSV file
 
-    file_location = f"static/{file.filename}"
-    with open(file_location, "wb") as buffer:
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     # Load DataFrame based on file type
@@ -1188,19 +1194,15 @@ async def analyze(
     try:
         if file_extension == '.csv':
             # Load CSV file into DataFrame
-            df = pd.read_csv(file_location, delimiter=",")
+            df = pd.read_csv(file_path, delimiter=",")
             
-            # Convert CSV file content to base64 string
-            with open(file_location, "rb") as csv_file:
-                file_bytes = base64.b64encode(csv_file.read()).decode('utf-8')
+            
 
         elif file_extension in ['.xls', '.xlsx']:
             # Load Excel file into DataFrame
-            df = pd.read_excel(file_location)
+            df = pd.read_excel(file_path)
             
-            # Convert Excel file content to base64 string
-            with open(file_location, "rb") as excel_file:
-                file_bytes = base64.b64encode(excel_file.read()).decode('utf-8')
+            
 
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
@@ -1695,12 +1697,6 @@ async def analyze(
         pdf_file_path = pdf_file_path.replace("\\", "/")
 
        
-        uploaded_filename = secure_filename(file.filename)
-        file_path = os.path.join("static", uploaded_filename)
-
-        # Save the uploaded file
-        with open(file_path, 'wb') as buffer:
-            shutil.copyfileobj(file.file, buffer)
             
         # Upload files to external endpoint
         url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
