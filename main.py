@@ -99,6 +99,7 @@ import requests
 from typing import List
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 headers = {'Content-Type': 'application/octet-stream'}
 
