@@ -1181,7 +1181,9 @@ async def analyze(
     global df
     # Read the uploaded CSV file
 
-    os.environ["HF_TOKEN"] = hf_token
+    from huggingface_hub import login
+
+    login(hf_token)
 
     if file.filename == '':
         raise HTTPException(status_code=400, detail="No file selected")
