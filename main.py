@@ -1185,6 +1185,7 @@ async def analyze(
 
     login(hf_token)
 
+
     if file.filename == '':
         raise HTTPException(status_code=400, detail="No file selected")
 
@@ -1240,9 +1241,9 @@ async def analyze(
         ))
 
         # Perform Sentiment Analysis
-        pretrained = "indonesia-bert-sentiment-classification"
-        model = AutoModelForSequenceClassification.from_pretrained(pretrained)
-        tokenizer = AutoTokenizer.from_pretrained(pretrained)
+        pretrained= "mdhugol/indonesia-bert-sentiment-classification"
+        model = AutoModelForSequenceClassification.from_pretrained(pretrained, use_auth_token=hf_token)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained, use_auth_token=hf_token)
         sentiment_analysis = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
         label_index = {'LABEL_0': 'positive', 'LABEL_1': 'neutral', 'LABEL_2': 'negative'}
 
