@@ -12,8 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Clone the Hugging Face repository into a separate directory
 RUN git clone https://huggingface.co/mdhugol/indonesia-bert-sentiment-classification /indonesia-bert-sentiment-classification
 
+# Install Hugging Face Transformers and other dependencies
+RUN pip install --upgrade pip
+RUN pip install transformers huggingface-hub
+
 # Copy the current directory contents into the container at /app
 COPY . /app
+
+# Set environment variable for Hugging Face token (optional, if not already set)
+ENV HF_HOME=/app/.cache/huggingface
+ENV HF_TOKEN=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
 
 # Ensure the static folder exists
 RUN mkdir -p /app/static
