@@ -35,6 +35,7 @@ transformers
 bertopic
 wordcloud
 Sastrawi
+huggingface_hub
 
 # Visualization
 plotly
