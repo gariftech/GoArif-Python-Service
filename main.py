@@ -1175,10 +1175,13 @@ async def analyze(
     target_variable: str = Form(...),
     custom_stopwords: str = Form(""),
     file: UploadFile = File(...),
+    hf_token: str = Form(...),
     custom_question: str = Form("")
 ):
     global df
     # Read the uploaded CSV file
+
+    os.environ["HF_TOKEN"] = hf_token
 
     if file.filename == '':
         raise HTTPException(status_code=400, detail="No file selected")
