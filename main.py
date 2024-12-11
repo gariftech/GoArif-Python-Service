@@ -1242,8 +1242,8 @@ async def analyze(
 
         # Perform Sentiment Analysis
         pretrained= "mdhugol/indonesia-bert-sentiment-classification"
-        model = AutoModelForSequenceClassification.from_pretrained(pretrained, use_auth_token=hf_token)
-        tokenizer = AutoTokenizer.from_pretrained(pretrained, use_auth_token=hf_token)
+        model = AutoModelForSequenceClassification.from_pretrained(pretrained, token=hf_token)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained, token=hf_token)
         sentiment_analysis = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
         label_index = {'LABEL_0': 'positive', 'LABEL_1': 'neutral', 'LABEL_2': 'negative'}
 
