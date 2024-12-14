@@ -218,27 +218,12 @@ class AnalyzeDocumentRequest2(BaseModel):
 class AnalyzeDocumentResponse2(BaseModel):
     meta: dict
     sentiment_plot_path: str
-    topic_plot_path: str
-    topic_plot_path1: str
-    topic_plot_path2: str
+    analysis_results: str
     wordcloud_positive: str
     gemini_response_pos: str
-    wordcloud_neutral: str
-    gemini_response_neu: str
     wordcloud_negative: str
     gemini_response_neg: str
-    bigram_positive: str
-    gemini_response_pos1: str
-    bigram_neutral: str
-    gemini_response_neu1: str
-    bigram_negative: str
-    gemini_response_neg1: str
-    unigram_positive: str
-    gemini_response_pos2: str
-    unigram_neutral: str
-    gemini_response_neu2: str
-    unigram_negative: str
-    gemini_response_neg2: str
+    response_result: str
     pdf_file_path: str
     file_path: str
 
@@ -1268,32 +1253,14 @@ async def analyze(
         sentiment_plot_path = 'static/sentiment_distribution.png'
         plt.savefig(sentiment_plot_path)
 
-        # Convert plots to base64 strings
-        with open(sentiment_plot_path, "rb") as image_file:
-            sentiment_plot_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+        # Filter the DataFrame to include only the desired columns
+        filtered_df = df[[target_variable, 'sentiment_label']]
 
-        model = BERTopic(verbose=True)
-        model.fit(df['cleaned_text'])
-        topics, probabilities = model.transform(df['cleaned_text'])
-        fig = model.visualize_barchart()
-        fig.write_image('static/barchart.png')
-        topic_plot_path = 'static/barchart.png'
+        # Generate the HTML table for the filtered DataFrame
+        analysis_results = filtered_df.to_html(classes='data')
 
-        fig1 = model.visualize_hierarchy()
-        fig1.write_image('static/hierarchy.png')
-        topic_plot_path1 = 'static/hierarchy.png'
-
-        topic_distr, _ = model.approximate_distribution(df['cleaned_text'], min_similarity=0)
-        fig2 = model.visualize_distribution(topic_distr[0])
-        fig2.write_image('static/dist.png')
-        topic_plot_path2 = 'static/dist.png'
-
-
-        
-        
-
-        # Generate sentiment analysis results table
-        analysis_results = df.to_html(classes='data')
+        # Optionally, save the filtered DataFrame to a CSV file
+        filtered_df.to_csv('sentiment_analysis_results.csv', index=False)
 
         # Concatenate Cleaned text
         positive_text = ' '.join(df[df['sentiment_label'] == 'positive']['cleaned_text'])
@@ -1357,216 +1324,46 @@ async def analyze(
         except Exception as e:
             print(f"Error generating content with Gemini: {e}")
             gemini_response_neg = "Error: Failed to generate content with Gemini API."
-        
-
-
-        # Convert plots to base64 strings
-        with open(wordcloud_positive, "rb") as image_file:
-            wordcloud_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(wordcloud_neutral, "rb") as image_file:
-            wordcloud_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(wordcloud_negative, "rb") as image_file:
-            wordcloud_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-
-
-
-        # Bigram Positive
-        words1 = positive_text.split()
-        bigrams = list(zip(words1, words1[1:]))
-        bigram_counts = collections.Counter(bigrams)
-        top_bigrams = dict(bigram_counts.most_common(10))
-
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_bigrams)), list(top_bigrams.values()), align='center')
-        plt.yticks(range(len(top_bigrams)), list(top_bigrams.keys()), rotation=0)
-        plt.xlabel('Count')
-        plt.ylabel('Bigram Words')
-        plt.title("Top 10 Bigram Positive Sentiment")
-
-        bigram_positive = "static/bigram_positive.png"
-        plt.savefig(bigram_positive)
-        
-
-        img1 = PIL.Image.open(bigram_positive)
-        try:
-            response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img1])
-            response1.resolve()
-            gemini_response_pos1 = format_text(response1.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_pos1 = "Error: Failed to generate content with Gemini API."
-
-        # Bigram Neutral
-        words2 = neutral_text.split()
-        bigrams = list(zip(words2, words2[1:]))
-        bigram_counts = collections.Counter(bigrams)
-        top_bigrams = dict(bigram_counts.most_common(10))
-
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_bigrams)), list(top_bigrams.values()), align='center')
-        plt.yticks(range(len(top_bigrams)), list(top_bigrams.keys()), rotation=0)
-        plt.xlabel('Count')
-        plt.ylabel('Bigram Words')
-        plt.title("Top 10 Bigram Neutral Sentiment")
-
-        bigram_neutral = "static/bigram_neutral.png"
-        plt.savefig(bigram_neutral)
-        
-
-        img2 = PIL.Image.open(bigram_neutral)
-        try:
-            response2 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img2])
-            response2.resolve()
-            gemini_response_neu1 = format_text(response2.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neu1 = "Error: Failed to generate content with Gemini API."
-
-        # Bigram Negative
-        words3 = negative_text.split()
-        bigrams = list(zip(words3, words3[1:]))
-        bigram_counts = collections.Counter(bigrams)
-        top_bigrams = dict(bigram_counts.most_common(10))
-
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_bigrams)), list(top_bigrams.values()), align='center')
-        plt.yticks(range(len(top_bigrams)), list(top_bigrams.keys()), rotation=0)
-        plt.xlabel('Count')
-        plt.ylabel('Bigram Words')
-        plt.title("Top 10 Bigram Negative Sentiment")
-
-        bigram_negative = "static/bigram_negative.png"
-        plt.savefig(bigram_negative)
-        
-
-        img3 = PIL.Image.open(bigram_negative)
-        try:
-            response3 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to bigram negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img3])
-            response3.resolve()
-            gemini_response_neg1 = format_text(response3.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neg1 = "Error: Failed to generate content with Gemini API."
 
 
         
-        # Convert plots to base64 strings
-        with open(bigram_positive, "rb") as image_file:
-            bigram_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(bigram_neutral, "rb") as image_file:
-            bigram_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(bigram_negative, "rb") as image_file:
-           bigram_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
+
+        from PIL import Image
+        # Combine WordClouds (Positive, Neutral, Negative)
+        wordclouds = [sentiment_plot_path, wordcloud_positive, wordcloud_neutral, wordcloud_negative]
+
+        # Open the three wordcloud images
+        images = [Image.open(wc) for wc in wordclouds]
+
+        # Assuming all wordclouds are the same size, we can place them side by side
+        total_width = sum(img.width for img in images)
+        max_height = max(img.height for img in images)
+
+        # Create a new image with combined width and max height
+        combined_image = Image.new('RGB', (total_width, max_height))
+
+        # Paste each image into the new combined image
+        x_offset = 0
+        for img in images:
+            combined_image.paste(img, (x_offset, 0))
+            x_offset += img.width
+
+        # Save the combined image to the static folder
+        combined_wordcloud_path = "static/wordcloud_combined.png"
+        combined_image.save(combined_wordcloud_path)
 
 
-            
-        # Unigram Positive
-        words2 = positive_text.split()
-
-        # Count the occurrences of each word
-        word_counts = collections.Counter(words2)
-
-        # Get top 10 words
-        top_words = dict(word_counts.most_common(10))
-
-        # Create bar chart
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_words)), list(top_words.values()), align='center')  # Horizontal bar chart
-        plt.yticks(range(len(top_words)), list(top_words.keys()), rotation=0)  # Swapping y-axis and x-axis
-        plt.xlabel('Count')  # Changed the label to Count
-        plt.ylabel('Words')  # Changed the label to Words
-        plt.title("Top 10 Unigram Positive Sentiment")
-        # Save the unigram image
-        unigram_positive = "static/unigram_positive.png"
-        # Save the entire plot as a PNG
-        plt.savefig(unigram_positive)
-        # Show the plot
+        def generate_gemini_response(plot_path):
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            img = Image.open(plot_path)
+            response = model.generate_content([custom_question + " As a marketing consultant, I want to analyze consumer insights from the sentiment word clouds (positive, neutral, and negative) and the market context. Please summarize your explanation and findings in one concise paragraph and one another paragraph for business insight and reccomendation to help me formulate actionable strategies.", img])
+            response.resolve()
+            return response.text
+        
+        response_result = format_text(generate_gemini_response(combined_wordcloud_path))
         
 
-        # Use Google Gemini API to generate content based on the bigram image
-        img1 = PIL.Image.open(unigram_positive)
-        try:
-            response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img1])
-            response1.resolve()
-            gemini_response_pos2 = format_text(response1.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_pos2 = "Error: Failed to generate content with Gemini API."
-                    
-
-
-        # Unigram Neutral
-        words2 = neutral_text.split()
-
-        # Count the occurrences of each word
-        word_counts = collections.Counter(words2)
-
-        # Get top 10 words
-        top_words = dict(word_counts.most_common(10))
-
-        # Create bar chart
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_words)), list(top_words.values()), align='center')  # Horizontal bar chart
-        plt.yticks(range(len(top_words)), list(top_words.keys()), rotation=0)  # Swapping y-axis and x-axis
-        plt.xlabel('Count')  # Changed the label to Count
-        plt.ylabel('Words')  # Changed the label to Words
-        plt.title("Top 10 Unigram Neutral Sentiment")
-        # Save the unigram image
-        unigram_neutral = "static/unigram_neutral.png"
-        # Save the entire plot as a PNG
-        plt.savefig(unigram_neutral)
-        # Show the plot
-        
-
-        # Use Google Gemini API to generate content based on the bigram image
-        img1 = PIL.Image.open(unigram_neutral)
-        try:
-            response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img1])
-            response1.resolve()
-            gemini_response_neu2 = format_text(response1.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neu2 = "Error: Failed to generate content with Gemini API."
-
-
-
-
-        # Unigram Negative
-        words2 = negative_text.split()
-
-        # Count the occurrences of each word
-        word_counts = collections.Counter(words2)
-
-        # Get top 10 words
-        top_words = dict(word_counts.most_common(10))
-
-        # Create bar chart
-        plt.figure(figsize=(10, 10))
-        plt.barh(range(len(top_words)), list(top_words.values()), align='center')  # Horizontal bar chart
-        plt.yticks(range(len(top_words)), list(top_words.keys()), rotation=0)  # Swapping y-axis and x-axis
-        plt.xlabel('Count')  # Changed the label to Count
-        plt.ylabel('Words')  # Changed the label to Words
-        plt.title("Top 10 Unigram Negative Sentiment")
-        # Save the unigram image
-        unigram_negative = "static/unigram_negative.png"
-        # Save the entire plot as a PNG
-        plt.savefig(unigram_negative)
-        # Show the plot
-        
-
-        # Use Google Gemini API to generate content based on the bigram image
-        img1 = PIL.Image.open(unigram_negative)
-        try:
-            response1 = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to unigram negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img1])
-            response1.resolve()
-            gemini_response_neg2 = format_text(response1.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neg2 = "Error: Failed to generate content with Gemini API."
             
         document_analyzed = True
 
@@ -1576,17 +1373,6 @@ async def analyze(
                 return text.encode('latin1', errors='replace').decode('latin1')  # Replace invalid characters
             except Exception as e:
                 return f"Error encoding text: {str(e)}"
-
-
-        # Convert plots to base64 strings
-        with open(unigram_positive, "rb") as image_file:
-            unigram_positive_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(unigram_neutral, "rb") as image_file:
-            unigram_neutral_bytes = base64.b64encode(image_file.read()).decode('utf-8')
-        # Convert plots to base64 strings
-        with open(unigram_negative, "rb") as image_file:
-           unigram_negative_bytes = base64.b64encode(image_file.read()).decode('utf-8')
 
 
 
@@ -1602,18 +1388,6 @@ async def analyze(
         # Sentiment Distribution Plot
         pdf.image(sentiment_plot_path, x=10, y=30, w=190)
         pdf.ln(100)
-
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Topic Modelling Barchart", ln=True, align='C')
-        pdf.image(topic_plot_path, x=10, y=30, w=190)
-
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Topic Modelling Hierarchy", ln=True, align='C')
-        pdf.image(topic_plot_path1, x=10, y=30, w=190)
-
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Topic Modelling Distribution", ln=True, align='C')
-        pdf.image(topic_plot_path2, x=10, y=30, w=190)
                     
 
         # Positive WordCloud and response
@@ -1621,81 +1395,20 @@ async def analyze(
         pdf.cell(200, 10, txt="Positive WordCloud", ln=True, align='C')
         pdf.image(wordcloud_positive, x=10, y=30, w=190)
         pdf.add_page()
-        pdf.cell(200, 10, txt="Positive WordCloud Google Gemini Response", ln=True, align='C')
+        
         pdf.ln(10)
         pdf.multi_cell(0, 10, safe_encode(gemini_response_pos))
 
-        # Neutral WordCloud and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral WordCloud", ln=True, align='C')
-        pdf.image(wordcloud_neutral, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral WordCloud Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_neu))
 
         # Negative WordCloud and response
         pdf.add_page()
         pdf.cell(200, 10, txt="Negative WordCloud", ln=True, align='C')
         pdf.image(wordcloud_negative, x=10, y=30, w=190)
         pdf.add_page()
-        pdf.cell(200, 10, txt="Negative WordCloud Google Gemini Response", ln=True, align='C')
+        
         pdf.ln(10)
         pdf.multi_cell(0, 10, safe_encode(gemini_response_neg))
 
-        # Positive Bigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Positive Bigram Sentiment", ln=True, align='C')
-        pdf.image(bigram_positive, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Positive Bigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_pos1))
-
-        # Neutral Bigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral Bigram Sentiment", ln=True, align='C')
-        pdf.image(bigram_neutral, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral Bigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_neu1))
-
-        # Negative Bigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Negative Bigram Sentiment", ln=True, align='C')
-        pdf.image(bigram_negative, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Negative Bigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_neg1))
-
-        # Positive Unigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Positive Unigram Sentiment", ln=True, align='C')
-        pdf.image(unigram_positive, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Positive Unigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_pos2))
-
-        # Neutral Unigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral Unigram Sentiment", ln=True, align='C')
-        pdf.image(unigram_neutral, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Neutral Unigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_neu2))
-
-        # Negative Unigram and response
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Negative Unigram Sentiment", ln=True, align='C')
-        pdf.image(unigram_negative, x=10, y=30, w=190)
-        pdf.add_page()
-        pdf.cell(200, 10, txt="Negative Unigram Google Gemini Response", ln=True, align='C')
-        pdf.ln(10)
-        pdf.multi_cell(0, 10, safe_encode(gemini_response_neg2))
         
         pdf_file_path = os.path.join("static", "sentiment.pdf")
         pdf.output(pdf_file_path)
@@ -1715,54 +1428,15 @@ async def analyze(
         # Upload Plot1
         with open(sentiment_plot_path, "rb") as f:
             sentiment_url = requests.post(url, files={"file": ("sentiment_distribution.png", f, "image/png")})
-
-        # Upload Plot1
-        with open(topic_plot_path, "rb") as f:
-            topic_plot_url1 = requests.post(url, files={"file": ("barchart.png", f, "image/png")})
-
-        # Upload Plot2
-        with open(topic_plot_path1, "rb") as f:
-            topic_plot_url2 = requests.post(url, files={"file": ("hierarchy.png", f, "image/png")})
-        
-        # Upload Plot2
-        with open(topic_plot_path2, "rb") as f:
-            topic_plot_url3 = requests.post(url, files={"file": ("dist.png", f, "image/png")})
         
         # Upload wordcloud
         with open(wordcloud_positive, "rb") as f:
             wordcloud_positive_url = requests.post(url, files={"file": ("wordcloud_positive.png", f, "image/png")})
-
-        # Upload Plot2
-        with open(wordcloud_neutral, "rb") as f:
-            wordcloud_neutral_url = requests.post(url, files={"file": ("wordcloud_neutral.png", f, "image/png")})
         
         # Upload Plot2
         with open(wordcloud_negative, "rb") as f:
             wordcloud_negative_url = requests.post(url, files={"file": ("wordcloud_negative.png", f, "image/png")})
 
-        # Upload bigram
-        with open(bigram_positive, "rb") as f:
-            bigram_positive_url = requests.post(url, files={"file": ("bigram_positive.png", f, "image/png")})
-
-        # Upload Plot2
-        with open(bigram_neutral, "rb") as f:
-            bigram_neutral_url = requests.post(url, files={"file": ("bigram_neutral.png", f, "image/png")})
-        
-        # Upload Plot2
-        with open(bigram_negative, "rb") as f:
-            bigram_negative_url = requests.post(url, files={"file": ("bigram_negative.png", f, "image/png")})
-        
-         # Upload unigram
-        with open(unigram_positive, "rb") as f:
-            unigram_positive_url = requests.post(url, files={"file": ("unigram_positive.png", f, "image/png")})
-
-        # Upload Plot2
-        with open(unigram_neutral, "rb") as f:
-            unigram_neutral_url = requests.post(url, files={"file": ("unigram_neutral.png", f, "image/png")})
-        
-        # Upload Plot2
-        with open(unigram_negative, "rb") as f:
-            unigram_negative_url = requests.post(url, files={"file": ("unigram_negative.png", f, "image/png")})
 
         # Upload PDF
         with open(pdf_file_path, "rb") as f:
@@ -1772,27 +1446,12 @@ async def analyze(
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
             sentiment_plot_path=sentiment_url.text,
-            topic_plot_path=topic_plot_url1.text,
-            topic_plot_path1=topic_plot_url2.text,
-            topic_plot_path2=topic_plot_url3.text,
+            analysis_results=analysis_results,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
-            wordcloud_neutral=wordcloud_neutral_url.text,
-            gemini_response_neu=gemini_response_neu,
             wordcloud_negative=wordcloud_negative_url.text,
             gemini_response_neg=gemini_response_neg,
-            bigram_positive=bigram_positive_url.text,
-            gemini_response_pos1=gemini_response_pos1,
-            bigram_neutral=bigram_neutral_url.text,
-            gemini_response_neu1=gemini_response_neu1,
-            bigram_negative=bigram_negative_url.text,
-            gemini_response_neg1=gemini_response_neg1,
-            unigram_positive=unigram_positive_url.text,
-            gemini_response_pos2=gemini_response_pos2,
-            unigram_neutral=unigram_neutral_url.text,
-            gemini_response_neu2=gemini_response_neu2,
-            unigram_negative=unigram_negative_url.text,
-            gemini_response_neg2=gemini_response_neg2,
+            response_result=response_result,
             pdf_file_path=pdf_url.text,
             file_path=uploaded_file_url.text
         )
