@@ -130,8 +130,10 @@ safety_settings = [
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
 
-def format_text(text: str) -> str:
-    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+def format_text(text):
+    # Replace **text** with <b>text</b>
+    text = re.sub(r'\*\*(.*?)\*\*', r'<br><b>\1</b>', text)
+    # Replace any remaining * with <br>
     text = text.replace('*', '<br>')
     return text
 
