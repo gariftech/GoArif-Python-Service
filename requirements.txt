@@ -36,6 +36,8 @@ bertopic
 wordcloud
 Sastrawi
 huggingface_hub
+scikit-learn
+scipy
 
 # Visualization
 plotly
