@@ -97,6 +97,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from typing import List
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.cluster.hierarchy import linkage, fcluster
+import scipy.spatial.distance as ssd
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -238,6 +244,25 @@ class AskResponse2(BaseModel):
     meta: dict
     question: str
     result: str
+
+
+
+class GetResult(BaseModel):
+    meta: dict
+    columns: str
+    file_path: str
+
+class AnalyzeDocumentRequest3(BaseModel):
+    api_key: str
+    custom_question: str
+    clustering_columns: str
+
+class AnalyzeDocumentResponse3(BaseModel):
+    meta: dict
+    table_data: str
+    recommendation_table_html: str
+    summary: str
+    file_path: str
     
 
 # Route for analyzing documents
@@ -1590,6 +1615,305 @@ def save_to_json(question_responses):
 async def download_pdf():
     pdf_output_path = 'static/analysis_report.pdf'
     return FileResponse(pdf_output_path, filename="analysis_report.pdf", media_type='application/pdf')
+
+
+
+
+
+
+### CLUSTERING ANALYSIS ----------------------------------------------------------------
+@app.post("/py/v1/getcolumn", response_model=GetResult)
+async def process_file(request: Request, file: UploadFile = File(...)):
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Load DataFrame based on file type
+    file_extension = os.path.splitext(file.filename)[1]
+    try:
+        if file_extension == '.csv':
+            # Load CSV file into DataFrame
+            df = pd.read_csv(file_path, delimiter=",")
+        elif file_extension in ['.xls', '.xlsx']:
+            # Load Excel file into DataFrame
+            df = pd.read_excel(file_path)
+        else:
+            raise HTTPException(status_code=415, detail="Unsupported file format")
+
+        # Get columns of the DataFrame
+        columns = df.columns.tolist()
+
+        # Upload CSV
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+
+        return GetResult(
+            meta={"status": "success", "code": 200},
+            columns=", ".join(columns),
+            file_path=uploaded_file_url.text  # Return the external file URL
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/py/v1/cluster", response_model=AnalyzeDocumentResponse3)
+async def result(
+    request: Request,
+    question: str = Form(...),
+    api_key: str = Form(...),
+    file: UploadFile = File(...),
+    clustering_columns: str = Form(...),
+):
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    
+
+    try:
+        # Save the uploaded file
+        
+
+        # Load the file into a DataFrame
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file_path, encoding='utf-8')
+        elif file.filename.endswith('.xlsx'):
+            df = pd.read_excel(file_path)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+
+        print("Columns in the uploaded file:", df.columns.tolist())
+
+        # Parse clustering_columns into a list
+        clustering_columns_list = [col.strip() for col in clustering_columns.split(",")]
+
+        print("Clustering Columns Provided:", clustering_columns_list)
+        missing_columns = [col for col in clustering_columns_list if col not in df.columns]
+        if missing_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The following columns are missing in the uploaded file: {', '.join(missing_columns)}"
+            )
+
+        # Create a copy of selected data for transformation
+        selected_data = df[clustering_columns_list].copy()
+        print("Selected Data for Clustering (before encoding):", selected_data.head())
+
+        # Store original values for categorical columns
+        original_categorical_values = {}
+
+        # Apply Label Encoding only for object columns
+        from sklearn import preprocessing
+        label_encoders = {}
+        for column in selected_data.columns:
+            if selected_data[column].dtype == 'object':
+                print(f"Encoding column: {column}")
+                label_encoders[column] = preprocessing.LabelEncoder()
+                # Store original values before encoding
+                original_categorical_values[column] = selected_data[column].copy()
+                try:
+                    selected_data[column] = label_encoders[column].fit_transform(selected_data[column].astype(str))
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Error encoding column {column}: {e}")
+
+        print("Transformed Data for Clustering:", selected_data.head())
+
+        # Apply DBSCAN Clustering
+        dbscan = DBSCAN(eps=0.7, min_samples=8)
+        cluster_labels = dbscan.fit_predict(selected_data)
+
+        print("Cluster Labels:", cluster_labels)
+
+        # Add cluster labels to the original DataFrame
+        df['cluster'] = cluster_labels
+
+        print("Final DataFrame with Clusters:", df.head())
+
+        # Calculate range values for each cluster and selected columns
+        ranges = []
+        unique_clusters = sorted(df['cluster'].unique())
+        
+        for cluster in unique_clusters:
+            if cluster == -1:
+                ranges.append({
+                    'Cluster': "Noise",
+                    clustering_columns_list[0]: "N/A",
+                    clustering_columns_list[1]: "N/A"
+                })
+            else:
+                cluster_data = df[df['cluster'] == cluster]
+                
+                def get_cluster_value(column):
+                    if column in original_categorical_values:
+                        # For categorical columns, use mode of original values
+                        return cluster_data[column].mode().iloc[0]
+                    else:
+                        # For numerical columns, use mean
+                        return f"{cluster_data[column].mean():.2f}"
+
+                ranges.append({
+                    'Cluster': cluster + 1,
+                    clustering_columns_list[0]: get_cluster_value(clustering_columns_list[0]),
+                    clustering_columns_list[1]: get_cluster_value(clustering_columns_list[1])
+                })
+
+        # Create a DataFrame for ranges
+        range_df = pd.DataFrame(ranges)
+        range_df = range_df[range_df['Cluster'] != "Noise"]
+
+        # Convert the DataFrame to HTML
+        table_data = range_df.to_html(index=False, classes='table table-striped', border=0)
+
+        # Save the DataFrame as a CSV file
+        result_csv_path = 'result.csv'
+        range_df.to_csv(result_csv_path, index=False)
+
+        # Step 1: Load the DataFrame from result.csv
+        df1 = pd.read_csv('result.csv')
+        # Step 2: Encode the 'Spending' column using OneHotEncoder
+        encoder = OneHotEncoder()
+        spending_encoded = encoder.fit_transform(df1[['Spending']]).toarray()
+        spending_columns = encoder.get_feature_names_out(['Spending'])
+        encoded_spending_df = pd.DataFrame(spending_encoded, columns=spending_columns)
+
+        # Step 3: Combine numerical features with encoded features
+        features = pd.concat([df1[['Customer_Satisfaction_Score']], encoded_spending_df], axis=1)
+
+        # Step 4: Compute cosine similarity between users based on satisfaction score and spending
+        user_similarity = cosine_similarity(features)
+
+        # Step 5: Create a DataFrame to display the similarity between users
+        user_similarity_df = pd.DataFrame(user_similarity, index=df1['Cluster'], columns=df1['Cluster'])
+
+        def generate_product_recommendation_table(ranged_df, user_similarity_df, max_groups=4):
+            recommendations = {
+                1: "Paket JITU 1 : Internet dan TV 100 Mbps",
+                2: "Paket Dynamic Telkomsel One : Kecepatan Wi-fi 300 Mbps, Paket Data 15GB",
+                3: "Paket Add-On Netflix : Netflix + Vidio & WeTV",
+                4: "Paket Prime Video : Konten Amazon Original",
+            }
+
+            recommendation_data = []
+            groupings = {}
+            similarity_threshold = 0.8
+
+            for cluster in ranged_df['Cluster']:
+                similar_clusters = user_similarity_df[cluster].sort_values(ascending=False).index[1:]
+                similar_clusters = [cl for cl in similar_clusters if user_similarity_df[cluster][cl] > similarity_threshold]
+
+                if len(similar_clusters) > 0:
+                    group_key = tuple(sorted(similar_clusters))
+                    if group_key not in groupings:
+                        groupings[group_key] = []
+                    groupings[group_key].append(cluster)
+
+            grouped_clusters = list(groupings.values())
+            while len(grouped_clusters) > max_groups:
+                grouped_clusters = sorted(grouped_clusters, key=len)
+                merged_group = grouped_clusters[0] + grouped_clusters[1]
+                grouped_clusters = grouped_clusters[2:]
+                grouped_clusters.append(merged_group)
+
+            for group in grouped_clusters:
+                representative_cluster = group[0]
+                recommendation = recommendations.get(representative_cluster, recommendations.get(1))
+
+                recommendation_data.append({
+                    'Group': f"Group {len(recommendation_data) + 1}",
+                    'Cluster IDs': ', '.join(map(str, group)),
+                    'Recommendation': recommendation
+                })
+
+            recommendation_df = pd.DataFrame(recommendation_data)
+            return recommendation_df
+
+        recommendation_df = generate_product_recommendation_table(df1, user_similarity_df, max_groups=4)
+
+        recommendation_table_html = recommendation_df.to_html(index=False, classes='table table-striped', border=0)
+
+        result_csv_path = 'result1.csv'
+        recommendation_df.to_csv(result_csv_path, index=False)
+
+        df_result = pd.read_csv('result.csv')
+        df_result1 = pd.read_csv('result1.csv')
+
+        combined_df = pd.concat([df_result, df_result1], ignore_index=True)
+
+        result_csv_path1 = 'combined_result.csv'
+        combined_df.to_csv(result_csv_path1, index=False)
+
+        api = api_key
+        genai.configure(api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+
+        # Load and process the CSV file
+        loader = UnstructuredCSVLoader(result_csv_path1, mode="elements")
+        docs = loader.load()
+
+        # Convert documents to text
+        context_text = "\n".join([doc.page_content for doc in docs])
+
+        # Create the template
+        template1 = """
+        Based on the following retrieved context:
+        {text}
+
+        You are a skilled Data Analyst. Analyze the following dataset with a focus on providing a clear summary, actionable insights, and group characteristics. Specifically, consider the following aspects:
+        1. Summarize the main characteristics of each group based on the average values and distribution of features for the clusters within each group.
+        2. Identify any notable patterns or trends between the groups and explain what differentiates them.
+        3. Suggest potential business strategies or actions based on these group characteristics (e.g., marketing strategies, product offerings, customer segmentation).
+        4. Provide recommendations for how each group might be targeted or engaged differently to maximize value.
+        5. Suggest a descriptive and intuitive name for each group.
+        6. Group the clusters into meaningful categories.
+
+        {question}
+        """
+
+        # Create prompt template with correct input variables
+        prompt_template = PromptTemplate(
+            input_variables=["text", "question"],
+            template=template1
+        )
+
+        # Create and run the chain with both required inputs
+        llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+        response = llm_chain.invoke({"text": context_text, "question": question})
+
+        # Extract the answer from the response
+        summary = response["text"] if isinstance(response, dict) else response
+
+
+        
+
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+
+
+       
+
+        return AnalyzeDocumentResponse3(
+            meta={"status": "success", "code": 200},
+            file_path=uploaded_file_url.text,
+            table_data=table_data,
+            recommendation_table_html=recommendation_table_html,
+            summary=summary
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
