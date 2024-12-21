@@ -102,7 +102,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.cluster.hierarchy import linkage, fcluster
-import scipy.spatial.distance as ssd
+import scipy.spatial.distance as SSD
+import csv
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -651,9 +652,24 @@ async def result(api_key: str = Form(...),
 
     # Read the file depending on the extension
     if uploaded_filename.endswith('.csv'):
-        df = pd.read_csv(file_path)
+        try:
+            # Sniff the file to detect the delimiter
+            with open(file_path, 'r') as file_obj:
+                sample = file_obj.read(1024)
+                file_obj.seek(0)
+                sniffer = csv.Sniffer()
+                delimiter = sniffer.sniff(sample).delimiter
+            
+            # Read CSV file with the detected delimiter
+            df = pd.read_csv(file_path, delimiter=delimiter)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
     elif uploaded_filename.endswith('.xlsx'):
-        df = pd.read_excel(file_path)
+        try:
+            df = pd.read_excel(file_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format")
 
@@ -762,17 +778,37 @@ async def multiclass(
 ):
     global document_analyzed
 
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
     try:
         # Read the file content into a DataFrame
-        if file.filename.endswith('.csv'):
-            # Load CSV file into DataFrame
-            df = pd.read_csv(file.file, encoding='utf-8')
-            
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
 
-        elif file.filename.endswith('.xlsx'):
-            # Load Excel file into DataFrame
-            df = pd.read_excel(file.file)
-            
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
 
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format")
@@ -938,12 +974,7 @@ async def multiclass(
 
 
 
-        uploaded_filename = secure_filename(file.filename)
-        file_path = os.path.join("static", uploaded_filename)
-
-        # Save the uploaded file
-        with open(file_path, 'wb') as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        
         
         # Upload files to external endpoint
         url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
@@ -1211,20 +1242,28 @@ async def analyze(
     # Load DataFrame based on file type
     file_extension = os.path.splitext(file.filename)[1]
     try:
-        if file_extension == '.csv':
-            # Load CSV file into DataFrame
-            df = pd.read_csv(file_path, delimiter=",")
-            
-            
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
 
-        elif file_extension in ['.xls', '.xlsx']:
-            # Load Excel file into DataFrame
-            df = pd.read_excel(file_path)
-            
-            
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
 
         else:
-            raise HTTPException(status_code=415, detail="Unsupported file format")
+            raise HTTPException(status_code=400, detail="Unsupported file format")
 
 
         if target_variable not in df.columns:
@@ -1637,14 +1676,28 @@ async def process_file(request: Request, file: UploadFile = File(...)):
     # Load DataFrame based on file type
     file_extension = os.path.splitext(file.filename)[1]
     try:
-        if file_extension == '.csv':
-            # Load CSV file into DataFrame
-            df = pd.read_csv(file_path, delimiter=",")
-        elif file_extension in ['.xls', '.xlsx']:
-            # Load Excel file into DataFrame
-            df = pd.read_excel(file_path)
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
+
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+
         else:
-            raise HTTPException(status_code=415, detail="Unsupported file format")
+            raise HTTPException(status_code=400, detail="Unsupported file format")
 
         # Get columns of the DataFrame
         columns = df.columns.tolist()
@@ -1688,10 +1741,26 @@ async def result(
         
 
         # Load the file into a DataFrame
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(file_path, encoding='utf-8')
-        elif file.filename.endswith('.xlsx'):
-            df = pd.read_excel(file_path)
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
+
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format")
 
