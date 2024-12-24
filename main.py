@@ -104,6 +104,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.cluster.hierarchy import linkage, fcluster
 import scipy.spatial.distance as SSD
 import csv
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -264,6 +267,27 @@ class AnalyzeDocumentResponse3(BaseModel):
     recommendation_table_html: str
     summary: str
     file_path: str
+
+
+
+class GetResult1(BaseModel):
+    meta: dict
+    columns: str
+    file_path: str
+
+# Define Pydantic models for requests and responses
+class AnalyzeDocument1Request(BaseModel):
+    api_key: str
+    question: str
+    target_variable: str
+
+class AnalyzeDocumentResponse4(BaseModel):
+    meta: dict
+    file_path: str
+    table_data: str
+    summary: str
+
+
     
 
 # Route for analyzing documents
@@ -1981,6 +2005,257 @@ async def result(
             recommendation_table_html=recommendation_table_html,
             summary=summary
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+### PREDICTIVE ANALYSIS ----------------------------------------------------------------
+
+
+
+@app.post("/py/v1/getcolumn1", response_model=GetResult1)
+async def process_file(request: Request, file: UploadFile = File(...)):
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Load DataFrame based on file type
+    file_extension = os.path.splitext(file.filename)[1]
+    try:
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
+
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+
+        # Get columns of the DataFrame
+        columns = df.columns.tolist()
+
+        # Upload CSV
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+
+        return GetResult1(
+            meta={"status": "success", "code": 200},
+            columns=", ".join(columns),
+            file_path=uploaded_file_url.text  # Return the external file URL
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/py/v1/predictive", response_model=AnalyzeDocumentResponse4)
+async def result(
+    request: Request,
+    question: str = Form(...),
+    api_key: str = Form(...),
+    file: UploadFile = File(...),
+    target_variable: str = Form(...),
+):
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    uploaded_filename = secure_filename(file.filename)
+    file_path = os.path.join("static", uploaded_filename)
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    
+
+    try:
+        # Save the uploaded file
+        
+
+        # Load the file into a DataFrame
+        if uploaded_filename.endswith('.csv'):
+            try:
+                # Sniff the file to detect the delimiter
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    sample = csvfile.read(1024)  # Read first 1024 characters
+                    sniffer = csv.Sniffer()
+                    delimiter = sniffer.sniff(sample).delimiter
+
+                # Load CSV file into DataFrame with detected delimiter
+                df = pd.read_csv(file_path, encoding='utf-8', delimiter=delimiter)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading CSV file: {str(e)}")
+
+        elif uploaded_filename.endswith('.xlsx'):
+            try:
+                # Load Excel file into DataFrame
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+        
+
+
+        # Data Cleansing Steps
+        
+        # 1. Drop columns containing 'id' in their name (case insensitive)
+        id_columns = [col for col in df.columns if 'id' in col.lower()]
+        df = df.drop(columns=id_columns)
+        
+        # 2. Drop categorical columns with more than 10 unique values
+        categorical_columns = df.select_dtypes(include=['object']).columns
+        high_cardinality_cols = [col for col in categorical_columns 
+                               if df[col].nunique() > 10 and col != target_variable]
+        df = df.drop(columns=high_cardinality_cols)
+        
+        # 3. Handle missing values
+        df = df.fillna(df.mode().iloc[0])
+
+        
+
+        # Save original label mappings for object data types
+        label_encoders = {}
+        label_mappings = {}
+        for col in df.select_dtypes(include=['object']).columns:
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col])
+            label_encoders[col] = le
+            label_mappings[col] = dict(zip(le.classes_, range(len(le.classes_))))
+
+        # Check if target_variable exists in the DataFrame
+        if target_variable not in df.columns:
+            raise HTTPException(status_code=400, detail=f"Target variable '{target_variable}' not found in dataset.")
+
+        # Splitting data into train and test sets
+        X = df.drop(columns=[target_variable])
+        y = df[target_variable]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Hyperparameter tuning for Random Forest
+        param_grid = {
+            'n_estimators': [100, 200],
+            'max_depth': [None, 10, 20],
+            'max_features': ['sqrt', 'log2'],
+            'class_weight': ['balanced', None]
+        }
+
+        rf = RandomForestClassifier(random_state=0)
+        grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=5, scoring='accuracy')
+        grid_search.fit(X_train, y_train)
+
+        best_model = grid_search.best_estimator_
+
+        # Predict probabilities
+        predictions_proba = best_model.predict_proba(X_test)
+        predictions_df = pd.DataFrame(predictions_proba, columns=[f"Proba_{cls}" for cls in best_model.classes_])
+
+        # Add original values back to the predictions DataFrame
+        for col, le in label_encoders.items():
+            if col in X_test.columns:
+                original_values = le.inverse_transform(X_test[col])
+                predictions_df[col] = original_values
+
+        predictions_df = pd.concat([X_test.reset_index(drop=True), predictions_df], axis=1)
+
+        # Convert the DataFrame to HTML
+        table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+
+        # Save the DataFrame as a CSV file
+        result_csv_path = 'result.csv'
+        predictions_df.to_csv(result_csv_path, index=False)
+
+
+        api = api_key
+        genai.configure(api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+
+        # Load the result CSV data for analysis
+        loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
+        docs = loader.load()
+
+        template1 = f"""
+        Based on the following retrieved context:
+        {{text}}
+        
+        You are a skilled Data Analyst tasked with performing a customer churn analysis. Please focus on the following aspects:
+        
+        1. **Churn Drivers**:
+           - Identify the main factors contributing to customer churn based on the dataset.
+           - Explain how these factors influence customer behavior and churn probability.
+        
+        2. **Churn Prediction Insights**:
+           - Analyze patterns and trends among customers who are likely to churn and those who are not.
+           - Highlight the key differences between these groups in terms of their characteristics and behaviors.
+        
+        3. **Actionable Strategies**:
+           - Suggest potential strategies to reduce customer churn, such as targeted retention campaigns, personalized offers, or service improvements.
+           - Provide specific actions for addressing the primary drivers of churn identified in the analysis.
+        
+        4. **Customer Segmentation**:
+           - Based on the analysis, segment customers into groups such as 'High Risk of Churn', 'Moderate Risk', and 'Low Risk'.
+           - For each segment:
+             - Provide a descriptive name.
+             - Explain the key characteristics of customers in this segment.
+        
+        5. **Engagement Recommendations**:
+           - Propose targeted engagement strategies for each customer segment to maximize retention and lifetime value.
+        
+        6. **Business Impact**:
+           - Quantify the potential impact of the suggested strategies on customer retention and overall business performance.
+        
+        The goal is to derive actionable insights that can directly inform retention strategies and improve customer satisfaction.
+        
+        {question}
+        """
+
+        prompt_template = PromptTemplate.from_template(template1)
+        llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+        stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
+        response = stuff_chain.invoke(docs)
+        summary = format_text(response["output_text"])
+
+        
+
+        # Upload files to external endpoint
+        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+
+        # Upload CSV
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
+
+        return AnalyzeDocumentResponse4(
+            meta={"status": "success", "code": 200},
+            file_path=uploaded_file_url.text,
+            table_data=table_data,
+            summary=summary     
+            
+        )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
