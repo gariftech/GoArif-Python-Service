@@ -304,7 +304,7 @@ async def analyze_document(
         # Initialize or update API key and models
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
 
         # Save the uploaded file
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
@@ -327,7 +327,7 @@ async def analyze_document(
         elif file_extension == ".mp3":
             # Process audio files differently
             audio_file = genai.upload_file(path=uploaded_file_path)
-            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
             prompt = f"{prompt}"
             response = model.generate_content([prompt, audio_file], safety_settings=safety_settings)
             summary = format_text(response.text)
@@ -388,7 +388,7 @@ async def ask_question(
         # Initialize or update API key and models
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
 
         # Save the uploaded file
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
@@ -410,7 +410,7 @@ async def ask_question(
             loader = UnstructuredPowerPointLoader(uploaded_file_path)
         elif file_extension == ".mp3":
             audio_file = genai.upload_file(path=uploaded_file_path)
-            model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
             latest_conversation = request.cookies.get("latest_question_response", "")
             prompt = "Answer the question based on the speech: " + question + (f" Latest conversation: {latest_conversation}" if latest_conversation else "")
             
@@ -702,7 +702,7 @@ async def result(api_key: str = Form(...),
     # Function to generate Gemini response based on the plot
     def generate_gemini_response(plot_path):
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         img = Image.open(plot_path)
         response = model.generate_content([custom_question + " Analyze the data insights from the chart.", img])
         response.resolve()
@@ -942,7 +942,7 @@ async def multiclass(
 
         # Response for the barplot
         img_barplot = Image.open(plot3_path)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         response3 = format_text(model.generate_content([custom_question, img_barplot]).text)
 
         # Response for the histplot
@@ -1050,7 +1050,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1369,7 +1369,7 @@ async def analyze(
         # Use Google Gemini API to generate content based on the uploaded image
         img = PIL.Image.open(wordcloud_positive)
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
         try:
             response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img])
@@ -1445,7 +1445,7 @@ async def analyze(
 
         def generate_gemini_response(plot_path):
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
             img = Image.open(plot_path)
             response = model.generate_content([custom_question + " As a marketing consultant, I want to analyze consumer insights from the sentiment word clouds (positive, neutral, and negative) and the market context. Please summarize your explanation and findings in one concise paragraph and one another paragraph for business insight and reccomendation to help me formulate actionable strategies.", img])
             response.resolve()
@@ -1568,7 +1568,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1950,7 +1950,7 @@ async def result(
 
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
 
         # Load and process the CSV file
         loader = UnstructuredCSVLoader(result_csv_path1, mode="elements")
@@ -2192,7 +2192,7 @@ async def result(
 
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
 
         # Load the result CSV data for analysis
         loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
