@@ -19,9 +19,11 @@ RUN pip install transformers huggingface-hub
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Set environment variable for Hugging Face token (optional, if not already set)
-ENV HF_HOME=/app/.cache/huggingface
-ENV HF_TOKEN=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
+# Dockerfile
+ARG HF_TOKEN
+ENV HF_TOKEN=${HF_TOKEN}
+
+RUN echo "Using token: ${HF_TOKEN}
 
 # Ensure the static folder exists
 RUN mkdir -p /app/static
