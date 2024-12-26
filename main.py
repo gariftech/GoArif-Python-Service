@@ -2071,7 +2071,8 @@ async def result(
             if col in original_df.columns:
                 predictions_df[col] = original_df[col]
 
-        predictions_df = pd.concat([X_test.reset_index(drop=True), predictions_df], axis=1)
+        # Add target variable
+        predictions_df[target_variable] = original_df[target_variable]
 
         # Convert the DataFrame to HTML
         table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
