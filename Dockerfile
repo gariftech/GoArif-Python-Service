@@ -19,11 +19,7 @@ RUN pip install transformers huggingface-hub
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Dockerfile
-ARG HF_TOKEN
-ENV HF_TOKEN=${HF_TOKEN}
 
-RUN echo "Using token: ${HF_TOKEN}
 
 # Ensure the static folder exists
 RUN mkdir -p /app/static
