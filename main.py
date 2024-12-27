@@ -1021,7 +1021,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1325,7 +1325,7 @@ async def analyze(
         # Use Google Gemini API to generate content based on the uploaded image
         img = PIL.Image.open(wordcloud_positive)
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
         try:
             response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img])
@@ -1401,7 +1401,7 @@ async def analyze(
 
         def generate_gemini_response(plot_path):
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             img = Image.open(plot_path)
             response = model.generate_content([custom_question + " As a marketing consultant, I want to analyze consumer insights from the sentiment word clouds (positive, neutral, and negative) and the market context. Please summarize your explanation and findings in one concise paragraph and one another paragraph for business insight and reccomendation to help me formulate actionable strategies.", img])
             response.resolve()
@@ -1524,7 +1524,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1876,7 +1876,7 @@ async def result(
 
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
 
         # Load and process the CSV file
         loader = UnstructuredCSVLoader(result_csv_path1, mode="elements")
@@ -1912,7 +1912,7 @@ async def result(
         response = llm_chain.invoke({"text": context_text, "question": question})
 
         # Extract the answer from the response
-        summary = response["text"] if isinstance(response, dict) else response
+        summary = format_text(response["text"] if isinstance(response, dict) else response)
 
 
         
@@ -2084,7 +2084,7 @@ async def result(
 
         api = api_key
         genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
 
         # Load the result CSV data for analysis
         loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
