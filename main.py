@@ -700,8 +700,8 @@ async def result(api_key: str = Form(...),
         plot2_path = generate_plot(df, 'static/plot2.png', 'histplot')
 
         # Generate Gemini responses
-        response1 = generate_gemini_response(plot1_path)
-        response2 = generate_gemini_response(plot2_path)
+        response1 = format_text(generate_gemini_response(plot1_path))
+        response2 = format_text(generate_gemini_response(plot2_path))
 
         uploaded_df = df
 
