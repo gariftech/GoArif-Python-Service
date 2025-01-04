@@ -107,6 +107,7 @@ import csv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.preprocessing import LabelEncoder
+from typing import Dict, List, Union, Any
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -1303,7 +1304,13 @@ async def analyze(
         filtered_df = df[[target_variable, 'sentiment_label']]
 
         # Generate the HTML table for the filtered DataFrame
-        analysis_results = filtered_df.to_html(classes='data')
+        #analysis_results = filtered_df.to_html(classes='data')
+
+        # Convert the DataFrame to a list of dictionaries
+        table_data_list = filtered_df.to_dict('records')
+
+        import json
+        table_data_json = json.dumps(table_data_list)
 
         # Optionally, save the filtered DataFrame to a CSV file
         filtered_df.to_csv('sentiment_analysis_results.csv', index=False)
@@ -1492,7 +1499,7 @@ async def analyze(
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
             sentiment_plot_path=sentiment_url.text,
-            analysis_results=analysis_results,
+            analysis_results=table_data_json,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
             wordcloud_negative=wordcloud_negative_url.text,
@@ -1794,7 +1801,13 @@ async def result(
         range_df = range_df[range_df['Cluster'] != "Noise"]
 
         # Convert the DataFrame to HTML
-        table_data = range_df.to_html(index=False, classes='table table-striped', border=0)
+        #table_data = range_df.to_html(index=False, classes='table table-striped', border=0)
+
+        # Convert the DataFrame to a list of dictionaries
+        table_data_list = range_df.to_dict('records')
+
+        import json
+        table_data_json = json.dumps(table_data_list)
 
         # Save the DataFrame as a CSV file
         result_csv_path = 'result.csv'
@@ -1861,7 +1874,14 @@ async def result(
 
         recommendation_df = generate_product_recommendation_table(df1, user_similarity_df, max_groups=4)
 
-        recommendation_table_html = recommendation_df.to_html(index=False, classes='table table-striped', border=0)
+        #recommendation_table_html = recommendation_df.to_html(index=False, classes='table table-striped', border=0)
+
+        # Convert the DataFrame to a list of dictionaries
+        table_data_list1 = recommendation_df.to_dict('records')
+
+        import json
+        table_data_json1 = json.dumps(table_data_list1)
+        
 
         result_csv_path = 'result1.csv'
         recommendation_df.to_csv(result_csv_path, index=False)
@@ -1927,8 +1947,8 @@ async def result(
         return AnalyzeDocumentResponse3(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data,
-            recommendation_table_html=recommendation_table_html,
+            table_data=table_data_json,
+            recommendation_table_html=table_data_json1,
             summary=summary
         )
     except Exception as e:
@@ -2075,7 +2095,25 @@ async def result(
         predictions_df[target_variable] = original_df[target_variable]
 
         # Convert the DataFrame to HTML
-        table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+        # table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+
+        # Convert the DataFrame to a list of dictionaries
+        table_data_list = predictions_df.to_dict('records')
+
+        import json
+        table_data_json = json.dumps(table_data_list)
+
+        
+        
+        print(table_data_json)
+
+
+        # Save the dictionary as a JSON file
+        import json
+        with open('output.json', 'w') as json_file:
+            json.dump(table_data_json, json_file, indent=4)
+
+        print("Data successfully written to output.json")
 
         # Save the DataFrame as a CSV file
         result_csv_path = 'result.csv'
@@ -2143,7 +2181,7 @@ async def result(
         return AnalyzeDocumentResponse4(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data,
+            table_data=table_data_json,
             summary=summary     
             
         )
