@@ -107,7 +107,7 @@ import csv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.preprocessing import LabelEncoder
-from typing import Dict, List, Union, Any
+from typing import List, Dict, Any
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -231,7 +231,7 @@ class AnalyzeDocumentRequest2(BaseModel):
 class AnalyzeDocumentResponse2(BaseModel):
     meta: dict
     sentiment_plot_path: str
-    analysis_results: str
+    analysis_results: List[Dict[str, Any]]
     wordcloud_positive: str
     gemini_response_pos: str
     wordcloud_negative: str
@@ -264,8 +264,8 @@ class AnalyzeDocumentRequest3(BaseModel):
 
 class AnalyzeDocumentResponse3(BaseModel):
     meta: dict
-    table_data: str
-    recommendation_table_html: str
+    table_data: List[Dict[str, Any]]
+    recommendation_table_html: List[Dict[str, Any]]
     summary: str
     file_path: str
 
@@ -285,7 +285,7 @@ class AnalyzeDocument1Request(BaseModel):
 class AnalyzeDocumentResponse4(BaseModel):
     meta: dict
     file_path: str
-    table_data: str
+    table_data: List[Dict[str, Any]]
     summary: str
 
 
@@ -1309,8 +1309,7 @@ async def analyze(
         # Convert the DataFrame to a list of dictionaries
         table_data_list = filtered_df.to_dict('records')
 
-        import json
-        table_data_json = json.dumps(table_data_list)
+        
 
         # Optionally, save the filtered DataFrame to a CSV file
         filtered_df.to_csv('sentiment_analysis_results.csv', index=False)
@@ -1499,7 +1498,7 @@ async def analyze(
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
             sentiment_plot_path=sentiment_url.text,
-            analysis_results=table_data_json,
+            analysis_results=table_data_list,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
             wordcloud_negative=wordcloud_negative_url.text,
@@ -1806,8 +1805,7 @@ async def result(
         # Convert the DataFrame to a list of dictionaries
         table_data_list = range_df.to_dict('records')
 
-        import json
-        table_data_json = json.dumps(table_data_list)
+        
 
         # Save the DataFrame as a CSV file
         result_csv_path = 'result.csv'
@@ -1879,8 +1877,7 @@ async def result(
         # Convert the DataFrame to a list of dictionaries
         table_data_list1 = recommendation_df.to_dict('records')
 
-        import json
-        table_data_json1 = json.dumps(table_data_list1)
+       
         
 
         result_csv_path = 'result1.csv'
@@ -1947,8 +1944,8 @@ async def result(
         return AnalyzeDocumentResponse3(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data_json,
-            recommendation_table_html=table_data_json1,
+            table_data=table_data_list,
+            recommendation_table_html=table_data_list1,
             summary=summary
         )
     except Exception as e:
@@ -2095,7 +2092,7 @@ async def result(
         predictions_df[target_variable] = original_df[target_variable]
 
         # Convert the DataFrame to HTML
-        # table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+        #table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
 
         # Convert the DataFrame to a list of dictionaries
         table_data_list = predictions_df.to_dict('records')
@@ -2104,14 +2101,10 @@ async def result(
         table_data_json = json.dumps(table_data_list)
 
         
+
         
-        print(table_data_json)
-
-
-        # Save the dictionary as a JSON file
-        import json
-        with open('output.json', 'w') as json_file:
-            json.dump(table_data_json, json_file, indent=4)
+        
+        
 
         print("Data successfully written to output.json")
 
@@ -2181,7 +2174,7 @@ async def result(
         return AnalyzeDocumentResponse4(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data_json,
+            table_data=table_data_list,
             summary=summary     
             
         )
