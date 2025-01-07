@@ -1022,7 +1022,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1531,7 +1531,7 @@ async def ask_question(
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
