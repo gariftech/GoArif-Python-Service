@@ -1601,7 +1601,7 @@ async def ask_question(
                     results = document_search.similarity_search_by_vector(query_embedding, k=1)
 
                     if results:
-                        current_response = results[0].page_content
+                        current_response = format_text(results[0].page_content)
                     else:
                         current_response = "No matching document found in the database."
                 else:
