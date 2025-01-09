@@ -487,7 +487,7 @@ async def ask_question(
 
             # Invoke the chain to get the summary
             response_chain = llm_chain1.invoke({"text": retrieved_texts})
-            summary1 = response_chain["text"]
+            summary1 = format_text(response_chain["text"])
 
             # Return the response
             return AskResponse(meta={"status": "success", "code": 200}, question=question, result=summary1)
