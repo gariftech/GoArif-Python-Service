@@ -1267,10 +1267,10 @@ async def analyze(
             df['cleaned_text'] = df['cleaned_text'].apply(lambda x: ' '.join([word for word in x.split() if word.lower() != stopword]))
 
         # Perform stopwords removal
-        df['cleaned_text'] = df['cleaned_text'].apply(lambda x: ' '.join(
-            [stemmer.stem(word) for word in stop_factory.create_stop_word_remover().remove(x).split()
-            if word.lower() not in all_stopwords]
-        ))
+        #df['cleaned_text'] = df['cleaned_text'].apply(lambda x: ' '.join(
+            #[stemmer.stem(word) for word in stop_factory.create_stop_word_remover().remove(x).split()
+            #if word.lower() not in all_stopwords]
+        #))
 
         # Perform Sentiment Analysis
         pretrained= "mdhugol/indonesia-bert-sentiment-classification"
@@ -1799,8 +1799,7 @@ async def result(
         range_df = pd.DataFrame(ranges)
         range_df = range_df[range_df['Cluster'] != "Noise"]
 
-        # Convert the DataFrame to HTML
-        #table_data = range_df.to_html(index=False, classes='table table-striped', border=0)
+        
 
         # Convert the DataFrame to a list of dictionaries
         table_data_list = range_df.to_dict('records')
@@ -1813,16 +1812,29 @@ async def result(
 
         # Step 1: Load the DataFrame from result.csv
         df1 = pd.read_csv('result.csv')
-        # Step 2: Encode the 'Spending' column using OneHotEncoder
-        encoder = OneHotEncoder()
-        spending_encoded = encoder.fit_transform(df1[['Spending']]).toarray()
-        spending_columns = encoder.get_feature_names_out(['Spending'])
-        encoded_spending_df = pd.DataFrame(spending_encoded, columns=spending_columns)
+        
+        # Apply Label Encoding only for object columns in df1
+        for column in df1.columns:
+            if df1[column].dtype == 'object':
+                print(f"Encoding column: {column}")
+                if column in label_encoders:
+                    df1[column] = label_encoders[column].transform(df1[column].astype(str))
+                else:
+                    raise HTTPException(status_code=500, detail=f"Label encoder not found for column {column}")
+
+        print("Transformed df1 for Clustering:", df1.head())
+
+        # Step 2: Encode all object columns in df1 using OneHotEncoder
+        onehot_encoder = OneHotEncoder(sparse_output=False)
+        encoded_features = onehot_encoder.fit_transform(df1[clustering_columns_list].select_dtypes(include=['object']))
+        encoded_columns = onehot_encoder.get_feature_names_out(df1[clustering_columns_list].select_dtypes(include=['object']).columns)
+        encoded_df = pd.DataFrame(encoded_features, columns=encoded_columns)
 
         # Step 3: Combine numerical features with encoded features
-        features = pd.concat([df1[['Customer_Satisfaction_Score']], encoded_spending_df], axis=1)
+        numerical_features = df1[clustering_columns_list].select_dtypes(exclude=['object'])
+        features = pd.concat([numerical_features, encoded_df], axis=1)
 
-        # Step 4: Compute cosine similarity between users based on satisfaction score and spending
+        # Step 4: Compute cosine similarity between users based on features
         user_similarity = cosine_similarity(features)
 
         # Step 5: Create a DataFrame to display the similarity between users
