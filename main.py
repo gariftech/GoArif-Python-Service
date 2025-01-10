@@ -736,7 +736,7 @@ async def result(api_key: str = Form(...),
         pdf.output(pdf_file_path)
 
         # Upload files to external endpoint
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
 
         # Upload CSV
         with open(file_path, "rb") as f:
@@ -973,7 +973,7 @@ async def multiclass(
         
         
         # Upload files to external endpoint
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
 
         # Upload CSV
         with open(file_path, "rb") as f:
@@ -1193,7 +1193,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         columns = df.columns.tolist()
 
         # Upload CSV
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
         with open(file_path, "rb") as f:
             uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
@@ -1471,7 +1471,7 @@ async def analyze(
        
             
         # Upload files to external endpoint
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
 
         # Upload CSV
         with open(file_path, "rb") as f:
@@ -1674,7 +1674,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         columns = df.columns.tolist()
 
         # Upload CSV
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
         with open(file_path, "rb") as f:
             uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
@@ -1946,7 +1946,7 @@ async def result(
 
         
 
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
         with open(file_path, "rb") as f:
             uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
@@ -1993,7 +1993,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         
         columns = df.columns.tolist()
         
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
         with open(file_path, "rb") as f:
             uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
             
@@ -2177,7 +2177,7 @@ async def result(
         
 
         # Upload files to external endpoint
-        url = "https://app.goarif.co/api/v1/Attachment/Upload/Paython"
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
 
         # Upload CSV
         with open(file_path, "rb") as f:
