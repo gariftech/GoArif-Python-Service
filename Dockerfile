@@ -24,6 +24,8 @@ RUN mkdir -p /app/static
 FROM python:3.9-slim
 WORKDIR /app
 
+RUN pip install fastapi uvicorn
+
 # Copy only necessary files from previous stages
 COPY --from=application /app /app
 COPY --from=application /indonesia-bert-sentiment-classification /indonesia-bert-sentiment-classification
