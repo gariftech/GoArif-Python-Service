@@ -112,27 +112,6 @@ from typing import List, Dict, Any
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=422,
-        content={"detail": exc.errors()},
-    )
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-    )
-
-@app.exception_handler(Exception)
-async def all_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Internal Server Error: {str(exc)}"}
-    )
-
 headers = {'Content-Type': 'application/octet-stream'}
 
 if os.getenv("FASTAPI_ENV") == "development":
@@ -252,7 +231,7 @@ class AnalyzeDocumentRequest2(BaseModel):
 class AnalyzeDocumentResponse2(BaseModel):
     meta: dict
     sentiment_plot_path: str
-    analysis_results: List[Dict[str, Any]]
+    analysis_results: str
     wordcloud_positive: str
     gemini_response_pos: str
     wordcloud_negative: str
@@ -285,8 +264,8 @@ class AnalyzeDocumentRequest3(BaseModel):
 
 class AnalyzeDocumentResponse3(BaseModel):
     meta: dict
-    table_data: List[Dict[str, Any]]
-    recommendation_table_html: List[Dict[str, Any]]
+    table_data: str
+    recommendation_table_html: str
     summary: str
     file_path: str
 
@@ -306,7 +285,7 @@ class AnalyzeDocument1Request(BaseModel):
 class AnalyzeDocumentResponse4(BaseModel):
     meta: dict
     file_path: str
-    table_data: List[Dict[str, Any]]
+    table_data: str #List[Dict[str, Any]]
     summary: str
 
 
@@ -1210,8 +1189,11 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
-        # Get columns of the DataFrame
-        columns = df.columns.tolist()
+        # Filter columns based on the condition
+        valid_columns = []
+        for column in df.columns:
+            if any(df[column].dropna().astype(str).apply(len) > 15):
+                valid_columns.append(column)
 
         # Upload CSV
         url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
@@ -1220,11 +1202,12 @@ async def process_file(request: Request, file: UploadFile = File(...)):
 
         return GetColumn(
             meta={"status": "success", "code": 200},
-            columns=", ".join(columns),
+            columns=", ".join(valid_columns),  # Use filtered columns
             file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
@@ -1325,10 +1308,10 @@ async def analyze(
         filtered_df = df[[target_variable, 'sentiment_label']]
 
         # Generate the HTML table for the filtered DataFrame
-        #analysis_results = filtered_df.to_html(classes='data')
+        analysis_results = filtered_df.to_html(classes='data')
 
         # Convert the DataFrame to a list of dictionaries
-        table_data_list = filtered_df.to_dict('records')
+        #table_data_list = filtered_df.to_dict('records')
 
         
 
@@ -1519,7 +1502,7 @@ async def analyze(
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
             sentiment_plot_path=sentiment_url.text,
-            analysis_results=table_data_list,
+            analysis_results=analysis_results,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
             wordcloud_negative=wordcloud_negative_url.text,
@@ -1821,9 +1804,9 @@ async def result(
         range_df = range_df[range_df['Cluster'] != "Noise"]
 
         
-
+        range_table_html = range_df.to_html(index=False, classes='table table-striped', border=0)
         # Convert the DataFrame to a list of dictionaries
-        table_data_list = range_df.to_dict('records')
+        #table_data_list = range_df.to_dict('records')
 
         
 
@@ -1905,10 +1888,10 @@ async def result(
 
         recommendation_df = generate_product_recommendation_table(df1, user_similarity_df, max_groups=4)
 
-        #recommendation_table_html = recommendation_df.to_html(index=False, classes='table table-striped', border=0)
+        recommendation_table_html = recommendation_df.to_html(index=False, classes='table table-striped', border=0)
 
         # Convert the DataFrame to a list of dictionaries
-        table_data_list1 = recommendation_df.to_dict('records')
+        #table_data_list1 = recommendation_df.to_dict('records')
 
        
         
@@ -1977,8 +1960,8 @@ async def result(
         return AnalyzeDocumentResponse3(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data_list,
-            recommendation_table_html=table_data_list1,
+            table_data=range_table_html,
+            recommendation_table_html=recommendation_table_html,
             summary=summary
         )
     except Exception as e:
@@ -2125,13 +2108,13 @@ async def result(
         predictions_df[target_variable] = original_df[target_variable]
 
         # Convert the DataFrame to HTML
-        #table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+        table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
 
         # Convert the DataFrame to a list of dictionaries
-        table_data_list = predictions_df.to_dict('records')
+        #table_data_list = predictions_df.to_dict('records')
 
-        import json
-        table_data_json = json.dumps(table_data_list)
+        #import json
+        #table_data_json = json.dumps(table_data_list)
 
         
 
@@ -2207,7 +2190,7 @@ async def result(
         return AnalyzeDocumentResponse4(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
-            table_data=table_data_list,
+            table_data=table_data,
             summary=summary     
             
         )
