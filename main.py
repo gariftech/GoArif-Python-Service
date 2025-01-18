@@ -1984,9 +1984,11 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         uploaded_filename = secure_filename(file.filename)
         file_path = os.path.join("static", uploaded_filename)
         
+        # Save the uploaded file
         with open(file_path, 'wb') as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        # Load DataFrame based on file type
         file_extension = os.path.splitext(file.filename)[1]
         if file_extension == '.csv':
             df = pd.read_csv(file_path, delimiter=",")
@@ -1995,20 +1997,26 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
         
-        columns = df.columns.tolist()
+        # Filter columns where unique value count is less than 5
+        filtered_columns = [
+            column for column in df.columns 
+            if df[column].nunique() < 5
+        ]
         
+        # Upload file to external API
         url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
         with open(file_path, "rb") as f:
             uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
             
         return GetResult1(
             meta={"status": "success", "code": 200},
-            columns=", ".join(columns),
+            columns=", ".join(filtered_columns),  # Return only filtered columns
             file_path=uploaded_file_url.text
         )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/py/v1/predictive", response_model=AnalyzeDocumentResponse4)
