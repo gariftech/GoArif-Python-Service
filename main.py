@@ -230,7 +230,7 @@ class AnalyzeDocumentRequest2(BaseModel):
 
 class AnalyzeDocumentResponse2(BaseModel):
     meta: dict
-    sentiment_plot_path: str
+    sentiment_plot_path: Dict[str, Any]
     analysis_results: str
     wordcloud_positive: str
     gemini_response_pos: str
@@ -1304,6 +1304,25 @@ async def analyze(
         sentiment_plot_path = 'static/sentiment_distribution.png'
         plt.savefig(sentiment_plot_path)
 
+
+        
+        # ApexCharts configuration
+        apex_chart_config = {
+            "chart": {
+                "type": "bar"
+            },
+            "plotOptions": {
+                "bar": {
+                    "horizontal": True
+                }
+            },
+            "series": [
+                {
+                    "data": [{"x": label, "y": count} for label, count in sentiment_counts.items()]
+                }
+            ]
+        }
+
         # Filter the DataFrame to include only the desired columns
         filtered_df = df[[target_variable, 'sentiment_label']]
 
@@ -1501,7 +1520,7 @@ async def analyze(
 
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
-            sentiment_plot_path=sentiment_url.text,
+            sentiment_plot_path=apex_chart_config,
             analysis_results=analysis_results,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
