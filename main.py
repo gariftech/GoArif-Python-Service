@@ -1537,6 +1537,8 @@ async def analyze(
 
 
 
+
+
 # Route for answering questions
 @app.post("/py/v1/ask2", response_model=AskResponse2)
 async def ask_question(
@@ -2034,7 +2036,6 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         
     except Exception as e:
         raise HTTPException(status_code=419, detail=str(e))
-
 
 
 @app.post("/py/v1/predictive", response_model=AnalyzeDocumentResponse4)
