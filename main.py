@@ -373,7 +373,7 @@ async def analyze_document(
 
     except Exception as e:
         print(f"An error occurred during document analysis: {e}")  # Log the error
-        raise HTTPException(status_code=500, detail="An error occurred during document analysis.")
+        raise HTTPException(status_code=419, detail="An error occurred during document analysis.")
 
 # Route for answering questions
 @app.post("/py/v1/ask", response_model=AskResponse)
@@ -496,7 +496,7 @@ async def ask_question(
             return AskResponse(meta={"status": "success", "code": 200}, question=question, result="No relevant results found.")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
     
 
 
@@ -770,13 +770,7 @@ async def result(api_key: str = Form(...),
             columns=", ".join(columns)
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-
-
-
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 @app.post("/py/v1/multiclass", response_model=MulticlassResponse)
@@ -1008,7 +1002,7 @@ async def multiclass(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -1047,7 +1041,7 @@ async def ask_question(
         try:
             docs = loader.load()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading document: {str(e)}")
+            raise HTTPException(status_code=419, detail=f"Error loading document: {str(e)}")
 
         # Combine document text
         text = "\n".join([doc.page_content for doc in docs])
@@ -1082,14 +1076,14 @@ async def ask_question(
                 response_chain = llm_chain1.invoke({"text": text})
                 summary1 = response_chain["text"]
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error invoking LLMChain: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error invoking LLMChain: {str(e)}")
 
             # Generate embeddings for the summary
             try:
                 summary_embedding = embeddings.embed_query(summary1)
                 document_search = FAISS.from_texts([summary1], embeddings)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error generating embeddings: {str(e)}")
 
             # Perform a search on the FAISS vector database
             try:
@@ -1104,7 +1098,7 @@ async def ask_question(
                 else:
                     current_response = "Vector database not initialized."
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error during similarity search: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error during similarity search: {str(e)}")
         else:
             current_response = "No relevant results found."
 
@@ -1118,7 +1112,7 @@ async def ask_question(
         return AskResponse1(meta={"status": "success", "code": 200}, question=question, result=current_response)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
 
 
 
@@ -1211,7 +1205,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
             file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -1538,7 +1532,9 @@ async def analyze(
 
 
     except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=419, detail=str(e))
+
+
 
 
 
@@ -1578,7 +1574,7 @@ async def ask_question(
         try:
             docs = loader.load()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading document: {str(e)}")
+            raise HTTPException(status_code=419, detail=f"Error loading document: {str(e)}")
 
         # Combine document text
         text = "\n".join([doc.page_content for doc in docs])
@@ -1613,14 +1609,14 @@ async def ask_question(
                 response_chain = llm_chain1.invoke({"text": text})
                 summary1 = response_chain["text"]
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error invoking LLMChain: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error invoking LLMChain: {str(e)}")
 
             # Generate embeddings for the summary
             try:
                 summary_embedding = embeddings.embed_query(summary1)
                 document_search = FAISS.from_texts([summary1], embeddings)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error generating embeddings: {str(e)}")
 
             # Perform a search on the FAISS vector database
             try:
@@ -1635,7 +1631,7 @@ async def ask_question(
                 else:
                     current_response = "Vector database not initialized."
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error during similarity search: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error during similarity search: {str(e)}")
         else:
             current_response = "No relevant results found."
 
@@ -1649,7 +1645,7 @@ async def ask_question(
         return AskResponse2(meta={"status": "success", "code": 200}, question=question, result=current_response)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
 
 
 
@@ -1712,7 +1708,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
             file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 @app.post("/py/v1/cluster", response_model=AnalyzeDocumentResponse3)
@@ -1780,7 +1776,7 @@ async def result(
                 try:
                     selected_data[column] = label_encoders[column].fit_transform(selected_data[column].astype(str))
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Error encoding column {column}: {e}")
+                    raise HTTPException(status_code=419, detail=f"Error encoding column {column}: {e}")
 
         print("Transformed Data for Clustering:", selected_data.head())
 
@@ -1848,7 +1844,7 @@ async def result(
                 if column in label_encoders:
                     df1[column] = label_encoders[column].transform(df1[column].astype(str))
                 else:
-                    raise HTTPException(status_code=500, detail=f"Label encoder not found for column {column}")
+                    raise HTTPException(status_code=419, detail=f"Label encoder not found for column {column}")
 
         print("Transformed df1 for Clustering:", df1.head())
 
@@ -1989,7 +1985,7 @@ async def result(
             summary=summary
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -2039,8 +2035,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 @app.post("/py/v1/predictive", response_model=AnalyzeDocumentResponse4)
@@ -2228,9 +2223,7 @@ async def result(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
+        raise HTTPException(status_code=419, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
