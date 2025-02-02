@@ -1,84 +1,114 @@
-# Standard Library Imports
-import base64
-import csv
-import json
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.document_loaders import (
+    PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader,
+    Docx2txtLoader, UnstructuredPowerPointLoader
+)
+from langchain.chains import StuffDocumentsChain
+from langchain.chains.llm import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.vectorstores import FAISS
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import os
-import pathlib
+import google.generativeai as genai
 import re
-import shutil
-import tempfile
-from typing import Any, Dict, List, Optional
-import logging
+import nest_asyncio
+from langchain.text_splitter import CharacterTextSplitter
+import base64
 
-# Third-Party Imports
-# Web Framework & Utilities
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+import pandas as pd
+import seaborn as sns
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.use('Agg')
+import numpy as np
+import google.generativeai as genai
+from PIL import Image
+from werkzeug.utils import secure_filename
+import os
+import json
+from fpdf import FPDF
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
-
-# Pydantic
-from pydantic import BaseModel, ConfigDict
-
-# LangChain Ecosystem
-from langchain.chains import LLMChain, StuffDocumentsChain
+import shutil
+import re
+from pydantic import BaseModel
+from typing import List
+from IPython.display import display, Markdown
+import textwrap
+from langchain.chains import StuffDocumentsChain
+from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import FAISS
-from langchain_community.document_loaders import (
-    Docx2txtLoader, PyPDFLoader, UnstructuredCSVLoader,
-    UnstructuredExcelLoader, UnstructuredPowerPointLoader
-)
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
+from langchain_google_genai import ChatGoogleGenerativeAI
+import tempfile
 
-# Google AI
-import google.generativeai as genai
-
-# Data Processing & Visualization
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+from fastapi import FastAPI, File, UploadFile, Request, HTTPException, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 import seaborn as sns
-matplotlib.use('Agg')  # Must be after matplotlib import
-
-# Image Processing
-from PIL import Image
-
-# File Handling
-from werkzeug.utils import secure_filename
-
-# PDF Generation
-from fpdf import FPDF
-
-# NLP & Text Processing
+sns.set_theme(color_codes=True)
+import matplotlib.pyplot as plt
+import os
+import pathlib
+import textwrap
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+import pandas as pd
+import re  # Import regular expression module for hyperlink removal
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import os
+import pathlib
+import textwrap
+import google.generativeai as genai
+from IPython.display import display
+from IPython.display import Markdown
+import PIL.Image
 from wordcloud import WordCloud
-
-# Machine Learning & AI
+import collections
+import json
 import torch
+from fpdf import FPDF
 from bertopic import BERTopic
-from scipy.cluster.hierarchy import fcluster, linkage
-import scipy.spatial.distance as SSD
-from sklearn.cluster import DBSCAN
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.model_selection import GridSearchCV, train_test_split
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-
-# Utilities
 import kaleido
 import nest_asyncio
+import re
+import shutil
+import os
+from fpdf import FPDF
+from langchain.chains import StuffDocumentsChain
+from langchain.chains.llm import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.vectorstores import FAISS
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
+from langchain_google_genai import ChatGoogleGenerativeAI
+from fastapi.middleware.cors import CORSMiddleware
 import requests
-import uvicorn
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from typing import List
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.cluster.hierarchy import linkage, fcluster
+import scipy.spatial.distance as SSD
+import csv
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import LabelEncoder
+from typing import List, Dict, Any
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -124,19 +154,28 @@ class AnalyzeDocumentRequest(BaseModel):
     api_key: str
     prompt: str
 
+    
+
 class AnalyzeDocumentResponse(BaseModel):
     meta: dict
     summary: str
+    
+
+    
 
 class AskRequest(BaseModel):
     question: str
     api_key: str
+
+    
 
 class AskResponse(BaseModel):
     meta: dict
     question: str
     result: str
     
+
+
 # Define Pydantic models for requests and responses
 class AnalyzeDocument1Request(BaseModel):
     api_key: str
@@ -192,7 +231,7 @@ class AnalyzeDocumentRequest2(BaseModel):
 
 class AnalyzeDocumentResponse2(BaseModel):
     meta: dict
-    sentiment_plot_path: Dict[str, Any]
+    sentiment_plot_path: str
     analysis_results: str
     wordcloud_positive: str
     gemini_response_pos: str
@@ -231,6 +270,8 @@ class AnalyzeDocumentResponse3(BaseModel):
     summary: str
     file_path: str
 
+
+
 class GetResult1(BaseModel):
     meta: dict
     columns: str
@@ -248,6 +289,9 @@ class AnalyzeDocumentResponse4(BaseModel):
     table_data: str #List[Dict[str, Any]]
     summary: str
 
+
+    
+
 # Route for analyzing documents
 @app.post("/py/v1", response_model=AnalyzeDocumentResponse)
 async def analyze_document(
@@ -256,13 +300,7 @@ async def analyze_document(
     file: UploadFile = File(...)
 ):
     global uploaded_file_path, document_analyzed, summary, api, llm
-
-    # Validate inputs
-    if not api_key or not prompt or not file:
-        raise HTTPException(status_code=400, detail="API key, prompt, and file are required.")
-
     loader = None
-    uploaded_file_path = None  # Initialize to ensure cleanup in case of errors
 
     try:
         # Initialize or update API key and models
@@ -271,19 +309,13 @@ async def analyze_document(
         llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
 
         # Save the uploaded file
-        file_extension = os.path.splitext(file.filename)[1].lower()
-        if not file_extension:
-            raise HTTPException(status_code=400, detail="File must have a valid extension.")
-
-        uploaded_file_path = f"uploaded_file{file_extension}"
-        try:
-            with open(uploaded_file_path, "wb") as f:
-                f.write(await file.read())  # Using async file read
-        except Exception as e:
-            logger.error(f"Failed to save uploaded file: {e}")
-            raise HTTPException(status_code=500, detail="Failed to process the uploaded file.")
+        uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
+        with open(uploaded_file_path, "wb") as f:
+            f.write(await file.read())  # Using async file read
 
         # Determine the file type and load accordingly
+        file_extension = os.path.splitext(uploaded_file_path)[1].lower()
+
         if file_extension == ".pdf":
             loader = PyPDFLoader(uploaded_file_path)
         elif file_extension == ".csv":
@@ -295,27 +327,20 @@ async def analyze_document(
         elif file_extension == ".pptx":
             loader = UnstructuredPowerPointLoader(uploaded_file_path)
         elif file_extension == ".mp3":
-            try:
-                audio_file = genai.upload_file(path=uploaded_file_path)
-                model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
-                response = model.generate_content([prompt, audio_file], safety_settings=safety_settings)
-                summary = format_text(response.text)
-                document_analyzed = True
-                return AnalyzeDocumentResponse(meta={"status": "success", "code": 200}, summary=summary)
-            except Exception as e:
-                logger.error(f"Failed to process audio file: {e}")
-                raise HTTPException(status_code=500, detail="Failed to process the audio file.")
-        else:
+            # Process audio files differently
+            audio_file = genai.upload_file(path=uploaded_file_path)
+            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
+            prompt = f"{prompt}"
+            response = model.generate_content([prompt, audio_file], safety_settings=safety_settings)
+            summary = format_text(response.text)
+            document_analyzed = True
+            return AnalyzeDocumentResponse(meta={"status": "success", "code": 200}, summary=summary)
+
+        # If no loader is set, raise an exception
+        if loader is None:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_extension}")
 
-        # Load and process the document
-        try:
-            docs = loader.load()
-        except Exception as e:
-            logger.error(f"Failed to load document: {e}")
-            raise HTTPException(status_code=500, detail="Failed to load the document.")
-
-        # Prepare the prompt template
+        docs = loader.load()
         prompt_template = PromptTemplate.from_template(
             f"""
             You are an expert at analyzing and interpreting information. Below is the provided content:
@@ -338,33 +363,17 @@ async def analyze_document(
             """
         )
 
-        # Run the analysis
-        try:
-            llm_chain = LLMChain(llm=llm, prompt=prompt_template)
-            stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
-            response = stuff_chain.invoke(docs)
-            summary = format_text(response["output_text"])
-            document_analyzed = True
-        except Exception as e:
-            logger.error(f"Failed to analyze document: {e}")
-            raise HTTPException(status_code=500, detail="Failed to analyze the document.")
+        llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+        stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
+        response = stuff_chain.invoke(docs)
+        summary = format_text(response["output_text"])
+        document_analyzed = True
 
         return AnalyzeDocumentResponse(meta={"status": "success", "code": 200}, summary=summary)
 
-    except HTTPException as http_err:
-        # Re-raise HTTPException to return specific error responses
-        raise http_err
     except Exception as e:
-        logger.error(f"Unexpected error during document analysis: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during document analysis.")
-    finally:
-        # Clean up the uploaded file
-        if uploaded_file_path and os.path.exists(uploaded_file_path):
-            try:
-                os.remove(uploaded_file_path)
-                logger.info(f"Cleaned up file: {uploaded_file_path}")
-            except Exception as e:
-                logger.error(f"Failed to clean up file: {e}")
+        print(f"An error occurred during document analysis: {e}")  # Log the error
+        raise HTTPException(status_code=419, detail="An error occurred during document analysis.")
 
 # Route for answering questions
 @app.post("/py/v1/ask", response_model=AskResponse)
@@ -487,11 +496,21 @@ async def ask_question(
             return AskResponse(meta={"status": "success", "code": 200}, question=question, result="No relevant results found.")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
     
 
 
+
+
+
+
 ### TABULAR ANALYSIS ----------------------------------------------------------------
+
+
+
+
+
+
 
 safety_settings = [
     {"category": "HARM_CATEGORY_DANGEROUS", "threshold": "BLOCK_NONE"},
@@ -751,13 +770,7 @@ async def result(api_key: str = Form(...),
             columns=", ".join(columns)
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-
-
-
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 @app.post("/py/v1/multiclass", response_model=MulticlassResponse)
@@ -767,7 +780,7 @@ async def multiclass(
     custom_question: str = Form(...),
     api_key: str = Form(...),
     file: UploadFile = File(...),
-    columns_for_analysis: str = Form(...),  # Changed to str to handle CSV string input
+      # Changed to str to handle CSV string input
 ):
     global document_analyzed
 
@@ -791,28 +804,28 @@ async def multiclass(
         else:
             raise HTTPException(status_code=415, detail="Unsupported file format")
 
-        # Process the columns_for_analysis
-        columns_for_analysis_list = [col.strip() for col in columns_for_analysis.split(',')]
 
-        # Ensure the columns exist in the DataFrame
-        missing_cols = [col for col in columns_for_analysis_list if col not in df.columns]
-        if missing_cols:
-            raise HTTPException(status_code=400, detail=f"Columns not found in the dataset: {', '.join(missing_cols)}")
+        df = clean_data(df)
 
         # Select the target variable and columns for analysis from the DataFrame
         if target_variable not in df.columns:
             raise HTTPException(status_code=400, detail=f"Target variable '{target_variable}' not found in the dataset")
 
         target_variable_data = df[target_variable]
-        columns_for_analysis_data = df[columns_for_analysis_list]
+        columns_for_analysis_data = df.drop(columns=[target_variable])
+    
 
         # Concatenate target variable and columns for analysis into a single DataFrame
         df = pd.concat([target_variable_data, columns_for_analysis_data], axis=1)
 
-        # Clean the data (if needed)
-        df = clean_data2(df)
+        
 
         # Generate visualizations
+
+
+
+
+        
 
         # Multiclass Barplot
         excluded_words = ["name", "postal", "date", "phone", "address", "id"]
@@ -860,6 +873,10 @@ async def multiclass(
         plot3_path = "static/multiclass_barplot.png"
         plt.savefig(plot3_path)
         plt.close(fig)
+
+
+
+
 
         # Multiclass Histplot
         int_vars = df.select_dtypes(include=['int', 'float']).columns.tolist()
@@ -985,7 +1002,7 @@ async def multiclass(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -1024,7 +1041,7 @@ async def ask_question(
         try:
             docs = loader.load()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading document: {str(e)}")
+            raise HTTPException(status_code=419, detail=f"Error loading document: {str(e)}")
 
         # Combine document text
         text = "\n".join([doc.page_content for doc in docs])
@@ -1059,14 +1076,14 @@ async def ask_question(
                 response_chain = llm_chain1.invoke({"text": text})
                 summary1 = response_chain["text"]
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error invoking LLMChain: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error invoking LLMChain: {str(e)}")
 
             # Generate embeddings for the summary
             try:
                 summary_embedding = embeddings.embed_query(summary1)
                 document_search = FAISS.from_texts([summary1], embeddings)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error generating embeddings: {str(e)}")
 
             # Perform a search on the FAISS vector database
             try:
@@ -1081,7 +1098,7 @@ async def ask_question(
                 else:
                     current_response = "Vector database not initialized."
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error during similarity search: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error during similarity search: {str(e)}")
         else:
             current_response = "No relevant results found."
 
@@ -1095,7 +1112,7 @@ async def ask_question(
         return AskResponse1(meta={"status": "success", "code": 200}, question=question, result=current_response)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
 
 
 
@@ -1188,7 +1205,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
             file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -1502,7 +1519,7 @@ async def analyze(
 
         return AnalyzeDocumentResponse2(
             meta={"status": "success", "code": 200},
-            sentiment_plot_path=apex_chart_config,
+            sentiment_plot_path= sentiment_url.text,
             analysis_results=analysis_results,
             wordcloud_positive=wordcloud_positive_url.text,
             gemini_response_pos=gemini_response_pos,
@@ -1515,7 +1532,9 @@ async def analyze(
 
 
     except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=419, detail=str(e))
+
+
 
 
 # Route for answering questions
@@ -1553,7 +1572,7 @@ async def ask_question(
         try:
             docs = loader.load()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error loading document: {str(e)}")
+            raise HTTPException(status_code=419, detail=f"Error loading document: {str(e)}")
 
         # Combine document text
         text = "\n".join([doc.page_content for doc in docs])
@@ -1588,14 +1607,14 @@ async def ask_question(
                 response_chain = llm_chain1.invoke({"text": text})
                 summary1 = response_chain["text"]
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error invoking LLMChain: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error invoking LLMChain: {str(e)}")
 
             # Generate embeddings for the summary
             try:
                 summary_embedding = embeddings.embed_query(summary1)
                 document_search = FAISS.from_texts([summary1], embeddings)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error generating embeddings: {str(e)}")
 
             # Perform a search on the FAISS vector database
             try:
@@ -1610,7 +1629,7 @@ async def ask_question(
                 else:
                     current_response = "Vector database not initialized."
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error during similarity search: {str(e)}")
+                raise HTTPException(status_code=419, detail=f"Error during similarity search: {str(e)}")
         else:
             current_response = "No relevant results found."
 
@@ -1624,7 +1643,7 @@ async def ask_question(
         return AskResponse2(meta={"status": "success", "code": 200}, question=question, result=current_response)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
 
 
 
@@ -1643,6 +1662,10 @@ def save_to_json(question_responses):
 async def download_pdf():
     pdf_output_path = 'static/analysis_report.pdf'
     return FileResponse(pdf_output_path, filename="analysis_report.pdf", media_type='application/pdf')
+
+
+
+
 
 
 ### CLUSTERING ANALYSIS ----------------------------------------------------------------
@@ -1683,7 +1706,7 @@ async def process_file(request: Request, file: UploadFile = File(...)):
             file_path=uploaded_file_url.text  # Return the external file URL
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 @app.post("/py/v1/cluster", response_model=AnalyzeDocumentResponse3)
@@ -1751,7 +1774,7 @@ async def result(
                 try:
                     selected_data[column] = label_encoders[column].fit_transform(selected_data[column].astype(str))
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Error encoding column {column}: {e}")
+                    raise HTTPException(status_code=419, detail=f"Error encoding column {column}: {e}")
 
         print("Transformed Data for Clustering:", selected_data.head())
 
@@ -1819,7 +1842,7 @@ async def result(
                 if column in label_encoders:
                     df1[column] = label_encoders[column].transform(df1[column].astype(str))
                 else:
-                    raise HTTPException(status_code=500, detail=f"Label encoder not found for column {column}")
+                    raise HTTPException(status_code=419, detail=f"Label encoder not found for column {column}")
 
         print("Transformed df1 for Clustering:", df1.head())
 
@@ -1960,7 +1983,7 @@ async def result(
             summary=summary
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
 
 
 
@@ -2010,7 +2033,10 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=419, detail=str(e))
+
+
+
 @app.post("/py/v1/predictive", response_model=AnalyzeDocumentResponse4)
 async def result(
     request: Request,
@@ -2019,219 +2045,184 @@ async def result(
     file: UploadFile = File(...),
     target_variable: str = Form(...),
 ):
-    # Validate inputs
-    if not question or not api_key or not file or not target_variable:
-        raise HTTPException(status_code=400, detail="Question, API key, file, and target variable are required.")
-
     if file.filename == '':
-        raise HTTPException(status_code=400, detail="No file selected.")
+        raise HTTPException(status_code=400, detail="No file selected")
 
     uploaded_filename = secure_filename(file.filename)
     file_path = os.path.join("static", uploaded_filename)
-    result_csv_path = None  # Initialize to ensure cleanup in case of errors
+
+    # Save the uploaded file
+    with open(file_path, 'wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    
 
     try:
         # Save the uploaded file
-        try:
-            with open(file_path, 'wb') as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            logger.info(f"File saved successfully: {file_path}")
-        except Exception as e:
-            logger.error(f"Failed to save uploaded file: {e}")
-            raise HTTPException(status_code=500, detail="Failed to process the uploaded file.")
+        
 
-        # Load the file based on its extension
-        file_extension = os.path.splitext(file.filename)[1].lower()
+        file_extension = os.path.splitext(file.filename)[1]
         if file_extension == '.csv':
-            try:
-                df = pd.read_csv(file_path, delimiter=",")
-            except Exception as e:
-                logger.error(f"Failed to read CSV file: {e}")
-                raise HTTPException(status_code=500, detail="Failed to read the CSV file.")
+            df = pd.read_csv(file_path, delimiter=",")
         elif file_extension == '.xlsx':
-            try:
-                df = pd.read_excel(file_path)
-            except Exception as e:
-                logger.error(f"Failed to read Excel file: {e}")
-                raise HTTPException(status_code=500, detail="Failed to read the Excel file.")
+            df = pd.read_excel(file_path)
         else:
-            raise HTTPException(status_code=415, detail="Unsupported file format. Only CSV and Excel files are supported.")
+            raise HTTPException(status_code=415, detail="Unsupported file format")
+        
+
 
         # Data Cleansing Steps
         original_df = df.copy()
-
+        
         # 1. Drop columns containing 'id' in their name (case insensitive)
         id_columns = [col for col in df.columns if 'id' in col.lower()]
         df = df.drop(columns=id_columns)
-
+        
         # 2. Drop categorical columns with more than 10 unique values
         categorical_columns = df.select_dtypes(include=['object']).columns
         high_cardinality_cols = [col for col in categorical_columns 
                                if df[col].nunique() > 10 and col != target_variable]
         df = df.drop(columns=high_cardinality_cols)
-
+        
         # 3. Handle missing values
         df = df.fillna(df.mode().iloc[0])
+
+        
 
         # Save original label mappings for object data types
         label_encoders = {}
         label_mappings = {}
         for col in df.select_dtypes(include=['object']).columns:
-            try:
-                le = LabelEncoder()
-                df[col] = le.fit_transform(df[col])
-                label_encoders[col] = le
-                label_mappings[col] = dict(zip(le.classes_, range(len(le.classes_))))
-            except Exception as e:
-                logger.error(f"Failed to encode column '{col}': {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to preprocess column '{col}'.")
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col])
+            label_encoders[col] = le
+            label_mappings[col] = dict(zip(le.classes_, range(len(le.classes_))))
 
         # Check if target_variable exists in the DataFrame
         if target_variable not in df.columns:
             raise HTTPException(status_code=400, detail=f"Target variable '{target_variable}' not found in dataset.")
 
         # Splitting data into train and test sets
-        try:
-            X = df.drop(columns=[target_variable])
-            y = df[target_variable]
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        except Exception as e:
-            logger.error(f"Failed to split dataset: {e}")
-            raise HTTPException(status_code=500, detail="Failed to split the dataset.")
+        X = df.drop(columns=[target_variable])
+        y = df[target_variable]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
         # Hyperparameter tuning for Random Forest
-        try:
-            param_grid = {
-                'n_estimators': [100, 200],
-                'max_depth': [None, 10, 20],
-                'max_features': ['sqrt', 'log2'],
-                'class_weight': ['balanced', None]
-            }
+        param_grid = {
+            'n_estimators': [100, 200],
+            'max_depth': [None, 10, 20],
+            'max_features': ['sqrt', 'log2'],
+            'class_weight': ['balanced', None]
+        }
 
-            rf = RandomForestClassifier(random_state=0)
-            grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=5, scoring='accuracy')
-            grid_search.fit(X_train, y_train)
-            best_model = grid_search.best_estimator_
-        except Exception as e:
-            logger.error(f"Failed to perform hyperparameter tuning: {e}")
-            raise HTTPException(status_code=500, detail="Failed to train the predictive model.")
+        rf = RandomForestClassifier(random_state=0)
+        grid_search = GridSearchCV(estimator=rf, param_grid=param_grid, cv=5, scoring='accuracy')
+        grid_search.fit(X_train, y_train)
+
+        best_model = grid_search.best_estimator_
 
         # Predict probabilities for entire cleaned dataset
-        try:
-            predictions_proba = best_model.predict_proba(X)
-            predictions_df = pd.DataFrame(predictions_proba, columns=[f"Proba_{cls}" for cls in best_model.classes_])
+        predictions_proba = best_model.predict_proba(X)
+        predictions_df = pd.DataFrame(predictions_proba, columns=[f"Proba_{cls}" for cls in best_model.classes_])
 
-            # Add original values back
-            for col, le in label_encoders.items():
-                if col in original_df.columns:
-                    predictions_df[col] = original_df[col]
+        # Add original values back 
+        for col, le in label_encoders.items():
+            if col in original_df.columns:
+                predictions_df[col] = original_df[col]
 
-            # Add target variable
-            predictions_df[target_variable] = original_df[target_variable]
+        # Add target variable
+        predictions_df[target_variable] = original_df[target_variable]
 
-            # Convert the DataFrame to HTML
-            table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
+        # Convert the DataFrame to HTML
+        table_data = predictions_df.to_html(index=False, classes='table table-striped', border=0)
 
-            # Save the DataFrame as a CSV file
-            result_csv_path = 'result.csv'
-            predictions_df.to_csv(result_csv_path, index=False)
-            logger.info(f"Predictions saved to {result_csv_path}")
-        except Exception as e:
-            logger.error(f"Failed to generate predictions: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate predictions.")
+        # Convert the DataFrame to a list of dictionaries
+        #table_data_list = predictions_df.to_dict('records')
 
-        # Initialize the LLM for analysis
-        try:
-            api = api_key
-            genai.configure(api_key=api)
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        #import json
+        #table_data_json = json.dumps(table_data_list)
 
-            # Load the result CSV data for analysis
-            loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
-            docs = loader.load()
+        
 
-            template1 = f"""
-            Based on the following retrieved context:
-            {{text}}
-            
-            You are a skilled Data Analyst tasked with performing a customer churn analysis. Please focus on the following aspects:
-            
-            1. **Churn Drivers**:
-               - Identify the main factors contributing to customer churn based on the dataset.
-               - Explain how these factors influence customer behavior and churn probability.
-            
-            2. **Churn Prediction Insights**:
-               - Analyze patterns and trends among customers who are likely to churn and those who are not.
-               - Highlight the key differences between these groups in terms of their characteristics and behaviors.
-            
-            3. **Actionable Strategies**:
-               - Suggest potential strategies to reduce customer churn, such as targeted retention campaigns, personalized offers, or service improvements.
-               - Provide specific actions for addressing the primary drivers of churn identified in the analysis.
-            
-            4. **Customer Segmentation**:
-               - Based on the analysis, segment customers into groups such as 'High Risk of Churn', 'Moderate Risk', and 'Low Risk'.
-               - For each segment:
-                 - Provide a descriptive name.
-                 - Explain the key characteristics of customers in this segment.
-            
-            5. **Engagement Recommendations**:
-               - Propose targeted engagement strategies for each customer segment to maximize retention and lifetime value.
-            
-            6. **Business Impact**:
-               - Quantify the potential impact of the suggested strategies on customer retention and overall business performance.
-            
-            The goal is to derive actionable insights that can directly inform retention strategies and improve customer satisfaction.
-            
-            {question}
-            """
+        
+        
+        
 
-            prompt_template = PromptTemplate.from_template(template1)
-            llm_chain = LLMChain(llm=llm, prompt=prompt_template)
-            stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
-            response = stuff_chain.invoke(docs)
-            summary = format_text(response["output_text"])
-        except Exception as e:
-            logger.error(f"Failed to analyze predictions: {e}")
-            raise HTTPException(status_code=500, detail="Failed to analyze predictions.")
+        print("Data successfully written to output.json")
+
+        # Save the DataFrame as a CSV file
+        result_csv_path = 'result.csv'
+        predictions_df.to_csv(result_csv_path, index=False)
+
+
+        api = api_key
+        genai.configure(api_key=api)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+
+        # Load the result CSV data for analysis
+        loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
+        docs = loader.load()
+
+        template1 = f"""
+        Based on the following retrieved context:
+        {{text}}
+        
+        You are a skilled Data Analyst tasked with performing a customer churn analysis. Please focus on the following aspects:
+        
+        1. **Churn Drivers**:
+           - Identify the main factors contributing to customer churn based on the dataset.
+           - Explain how these factors influence customer behavior and churn probability.
+        
+        2. **Churn Prediction Insights**:
+           - Analyze patterns and trends among customers who are likely to churn and those who are not.
+           - Highlight the key differences between these groups in terms of their characteristics and behaviors.
+        
+        3. **Actionable Strategies**:
+           - Suggest potential strategies to reduce customer churn, such as targeted retention campaigns, personalized offers, or service improvements.
+           - Provide specific actions for addressing the primary drivers of churn identified in the analysis.
+        
+        4. **Customer Segmentation**:
+           - Based on the analysis, segment customers into groups such as 'High Risk of Churn', 'Moderate Risk', and 'Low Risk'.
+           - For each segment:
+             - Provide a descriptive name.
+             - Explain the key characteristics of customers in this segment.
+        
+        5. **Engagement Recommendations**:
+           - Propose targeted engagement strategies for each customer segment to maximize retention and lifetime value.
+        
+        6. **Business Impact**:
+           - Quantify the potential impact of the suggested strategies on customer retention and overall business performance.
+        
+        The goal is to derive actionable insights that can directly inform retention strategies and improve customer satisfaction.
+        
+        {question}
+        """
+
+        prompt_template = PromptTemplate.from_template(template1)
+        llm_chain = LLMChain(llm=llm, prompt=prompt_template)
+        stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
+        response = stuff_chain.invoke(docs)
+        summary = format_text(response["output_text"])
+
+        
 
         # Upload files to external endpoint
-        try:
-            url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
-            with open(file_path, "rb") as f:
-                uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
-            logger.info(f"File uploaded successfully: {uploaded_file_url.text}")
-        except Exception as e:
-            logger.error(f"Failed to upload file: {e}")
-            raise HTTPException(status_code=500, detail="Failed to upload file to external endpoint.")
+        url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
+
+        # Upload CSV
+        with open(file_path, "rb") as f:
+            uploaded_file_url = requests.post(url, files={"file": (file_path, f, "text/csv")})
 
         return AnalyzeDocumentResponse4(
             meta={"status": "success", "code": 200},
             file_path=uploaded_file_url.text,
             table_data=table_data,
-            summary=summary
+            summary=summary     
+            
         )
 
-    except HTTPException as http_err:
-        # Re-raise HTTPException to return specific error responses
-        raise http_err
     except Exception as e:
-        logger.error(f"Unexpected error during predictive analysis: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during predictive analysis.")
-    finally:
-        # Clean up temporary files
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.info(f"Cleaned up file: {file_path}")
-            except Exception as e:
-                logger.error(f"Failed to clean up file: {e}")
-        if result_csv_path and os.path.exists(result_csv_path):
-            try:
-                os.remove(result_csv_path)
-                logger.info(f"Cleaned up file: {result_csv_path}")
-            except Exception as e:
-                logger.error(f"Failed to clean up file: {e}")
-
+        raise HTTPException(status_code=419, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
