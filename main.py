@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from typing import List, Dict, Any
 import vertexai
-from vertexai.generative_models import GenerativeModel, Image
+from vertexai.generative_models import GenerativeModel, Image, HarmBlockThreshold, HarmCategory
 from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_community.document_loaders import (
     PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader,
@@ -28,7 +28,7 @@ import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
+
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
 from IPython.display import display, Markdown
@@ -50,6 +50,7 @@ import scipy.spatial.distance as SSD
 import csv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
+import cv2
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -89,24 +90,12 @@ llm = None
 vertexai.init(project=PROJECT_ID, location=REGION)
 
 # Update safety settings for Vertex AI format
-safety_settings = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE"
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE" 
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE"
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE"
-    }
-]
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
 
 def format_text(text):
     # Replace **text** with <b>text</b>
@@ -454,13 +443,12 @@ async def ask_question(
 ### TABULAR ANALYSIS ----------------------------------------------------------------
 
 
-safety_settings = [
-    {"category": "HARM_CATEGORY_DANGEROUS", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-]
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
 
 sns.set_theme(color_codes=True)
 uploaded_df = None
@@ -1249,7 +1237,7 @@ async def analyze(
         wordcloud.to_file(wordcloud_positive)
 
         # Use Google Gemini API to generate content based on the uploaded image
-        img = PIL.Image.open(wordcloud_positive)
+        
         model = GenerativeModel("gemini-2.0-flash-exp")
         response = model.generate_content(
             [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_positive)],
@@ -1266,7 +1254,7 @@ async def analyze(
         wordcloud_neutral = "static/wordcloud_neutral.png"
         wordcloud.to_file(wordcloud_neutral)
 
-        img = PIL.Image.open(wordcloud_neutral)
+        
         response = model.generate_content(
             [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_neutral)],
             safety_settings=safety_settings
@@ -1282,7 +1270,7 @@ async def analyze(
         wordcloud_negative = "static/wordcloud_negative.png"
         wordcloud.to_file(wordcloud_negative)
 
-        img = PIL.Image.open(wordcloud_negative)
+        
         response = model.generate_content(
             [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_negative)],
             safety_settings=safety_settings
@@ -1292,29 +1280,20 @@ async def analyze(
 
         
 
-        from PIL import Image
-        # Combine WordClouds (Positive, Neutral, Negative)
+        # Load the images using OpenCV
         wordclouds = [sentiment_plot_path, wordcloud_positive, wordcloud_neutral, wordcloud_negative]
+        images = [cv2.imread(wc) for wc in wordclouds]
 
-        # Open the three wordcloud images
-        images = [Image.open(wc) for wc in wordclouds]
+        # Ensure all images are of the same height (resize if needed)
+        height = max(img.shape[0] for img in images)
+        resized_images = [cv2.resize(img, (int(img.shape[1] * height / img.shape[0]), height)) for img in images]
 
-        # Assuming all wordclouds are the same size, we can place them side by side
-        total_width = sum(img.width for img in images)
-        max_height = max(img.height for img in images)
+        # Concatenate images horizontally
+        combined_image = cv2.hconcat(resized_images)
 
-        # Create a new image with combined width and max height
-        combined_image = Image.new('RGB', (total_width, max_height))
-
-        # Paste each image into the new combined image
-        x_offset = 0
-        for img in images:
-            combined_image.paste(img, (x_offset, 0))
-            x_offset += img.width
-
-        # Save the combined image to the static folder
+        # Save the combined image
         combined_wordcloud_path = "static/wordcloud_combined.png"
-        combined_image.save(combined_wordcloud_path)
+        cv2.imwrite(combined_wordcloud_path, combined_image)
 
 
         def generate_gemini_response(plot_path):
