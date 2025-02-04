@@ -1,114 +1,65 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from langchain_google_genai import ChatGoogleGenerativeAI
+from typing import List, Dict, Any
+import vertexai
+from vertexai.generative_models import GenerativeModel, Image
+from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_community.document_loaders import (
     PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader,
     Docx2txtLoader, UnstructuredPowerPointLoader
 )
-from langchain.chains import StuffDocumentsChain
-from langchain.chains.llm import LLMChain
+from langchain.chains import StuffDocumentsChain, LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 import os
-import google.generativeai as genai
 import re
 import nest_asyncio
-from langchain.text_splitter import CharacterTextSplitter
 import base64
-
+import tempfile
+import shutil
+import json
 import pandas as pd
 import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
-matplotlib.use('Agg')
 import numpy as np
-import google.generativeai as genai
 from PIL import Image
 from werkzeug.utils import secure_filename
-import os
-import json
 from fpdf import FPDF
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
-import shutil
-import re
-from pydantic import BaseModel
-from typing import List
 from IPython.display import display, Markdown
-import textwrap
-from langchain.chains import StuffDocumentsChain
-from langchain.chains.llm import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
-from langchain_google_genai import ChatGoogleGenerativeAI
-import tempfile
-
-from fastapi import FastAPI, File, UploadFile, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-import seaborn as sns
-sns.set_theme(color_codes=True)
-import matplotlib.pyplot as plt
-import os
-import pathlib
 import textwrap
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
-import pandas as pd
-import re  # Import regular expression module for hyperlink removal
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import os
-import pathlib
-import textwrap
-import google.generativeai as genai
-from IPython.display import display
-from IPython.display import Markdown
-import PIL.Image
+import torch
 from wordcloud import WordCloud
 import collections
-import json
-import torch
-from fpdf import FPDF
 from bertopic import BERTopic
 import kaleido
-import nest_asyncio
-import re
-import shutil
-import os
-from fpdf import FPDF
-from langchain.chains import StuffDocumentsChain
-from langchain.chains.llm import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredCSVLoader, UnstructuredExcelLoader, Docx2txtLoader, UnstructuredPowerPointLoader
-from langchain_google_genai import ChatGoogleGenerativeAI
-from fastapi.middleware.cors import CORSMiddleware
 import requests
-from typing import List
 from sklearn.cluster import DBSCAN
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.cluster.hierarchy import linkage, fcluster
 import scipy.spatial.distance as SSD
 import csv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
-from sklearn.preprocessing import LabelEncoder
-from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+PROJECT_ID= os.getenv('PROJECT_ID')
+REGION = os.getenv('REGION')
+
+# Set matplotlib backend to 'Agg'
+matplotlib.use('Agg')
+sns.set_theme(color_codes=True)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -134,12 +85,27 @@ question_responses = []
 api = None
 llm = None
 
+# Initialize Vertex AI
+vertexai.init(project=PROJECT_ID, location=REGION)
+
+# Update safety settings for Vertex AI format
 safety_settings = [
-    {"category": "HARM_CATEGORY_DANGEROUS", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_NONE"
+    },
+    {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_NONE" 
+    },
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_NONE"
+    }
 ]
 
 def format_text(text):
@@ -154,28 +120,21 @@ class AnalyzeDocumentRequest(BaseModel):
     api_key: str
     prompt: str
 
-    
-
 class AnalyzeDocumentResponse(BaseModel):
     meta: dict
     summary: str
-    
-
     
 
 class AskRequest(BaseModel):
     question: str
     api_key: str
 
-    
 
 class AskResponse(BaseModel):
     meta: dict
     question: str
     result: str
     
-
-
 # Define Pydantic models for requests and responses
 class AnalyzeDocument1Request(BaseModel):
     api_key: str
@@ -215,9 +174,6 @@ class AskResponse1(BaseModel):
     question: str
     result: str
     
-
-
-
 class GetColumn(BaseModel):
     meta: dict
     columns: str
@@ -250,8 +206,6 @@ class AskResponse2(BaseModel):
     meta: dict
     question: str
     result: str
-
-
 
 class GetResult(BaseModel):
     meta: dict
@@ -299,19 +253,17 @@ async def analyze_document(
     prompt: str = Form(...),
     file: UploadFile = File(...)
 ):
-    global uploaded_file_path, document_analyzed, summary, api, llm
+    global uploaded_file_path, document_analyzed, summary
     loader = None
 
     try:
-        # Initialize or update API key and models
-        api = api_key
-        genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
+        # Initialize Vertex AI LLM
+        llm = ChatVertexAI(model_name="gemini-2.0-flash-exp")
 
         # Save the uploaded file
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
-            f.write(await file.read())  # Using async file read
+            f.write(await file.read())
 
         # Determine the file type and load accordingly
         file_extension = os.path.splitext(uploaded_file_path)[1].lower()
@@ -327,11 +279,12 @@ async def analyze_document(
         elif file_extension == ".pptx":
             loader = UnstructuredPowerPointLoader(uploaded_file_path)
         elif file_extension == ".mp3":
-            # Process audio files differently
-            audio_file = genai.upload_file(path=uploaded_file_path)
-            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
-            prompt = f"{prompt}"
-            response = model.generate_content([prompt, audio_file], safety_settings=safety_settings)
+            # Handle audio files with Vertex AI
+            model = GenerativeModel("gemini-2.0-flash-exp")
+            response = model.generate_content(
+                [prompt, Image.load_from_file(uploaded_file_path)],
+                safety_settings=safety_settings
+            )
             summary = format_text(response.text)
             document_analyzed = True
             return AnalyzeDocumentResponse(meta={"status": "success", "code": 200}, summary=summary)
@@ -383,19 +336,17 @@ async def ask_question(
     question: str = Form(...),
     file: UploadFile = File(...),
 ):
-    global uploaded_file_path, document_analyzed, summary, api, llm
+    global uploaded_file_path, document_analyzed, summary
     loader = None
 
     try:
-        # Initialize or update API key and models
-        api = api_key
-        genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api)
+        # Initialize Vertex AI LLM
+        llm = ChatVertexAI(model_name="gemini-2.0-flash-exp")
 
         # Save the uploaded file
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
-            f.write(await file.read())  # Using async file read
+            f.write(await file.read())
 
         # Determine the file type and load accordingly
         file_extension = os.path.splitext(uploaded_file_path)[1].lower()
@@ -411,13 +362,14 @@ async def ask_question(
         elif file_extension == ".pptx":
             loader = UnstructuredPowerPointLoader(uploaded_file_path)
         elif file_extension == ".mp3":
-            audio_file = genai.upload_file(path=uploaded_file_path)
-            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
+            model = GenerativeModel("gemini-2.0-flash-exp")
             latest_conversation = request.cookies.get("latest_question_response", "")
             prompt = "Answer the question based on the speech: " + question + (f" Latest conversation: {latest_conversation}" if latest_conversation else "")
             
-            # Generate response based on audio input
-            response = model.generate_content([prompt, audio_file], safety_settings=safety_settings)
+            response = model.generate_content(
+                [prompt, Image.load_from_file(uploaded_file_path)],
+                safety_settings=safety_settings
+            )
             current_response = response.text
             current_question = f"You asked: {question}"
 
@@ -428,14 +380,14 @@ async def ask_question(
             text = current_response
 
             # Set the Google API key
-            os.environ["GOOGLE_API_KEY"] = api
+            os.environ["GOOGLE_API_KEY"] = api_key
 
             # Split the text into chunks
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
             chunks = text_splitter.split_text(text)
 
             # Generate embeddings for the chunks
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+            embeddings = VertexAIEmbeddings(model_name="text-embedding-004")
             document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
             if document_search:
@@ -458,14 +410,14 @@ async def ask_question(
 
         docs = loader.load()
         text = "\n".join([doc.page_content for doc in docs])
-        os.environ["GOOGLE_API_KEY"] = api
+        os.environ["GOOGLE_API_KEY"] = api_key
 
         # Split text into chunks
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
         chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
 
         # Generate embeddings for the chunks
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        embeddings = VertexAIEmbeddings(model_name="text-embedding-004")
         document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
 
         # Generate query embedding and perform similarity search
@@ -499,17 +451,7 @@ async def ask_question(
         raise HTTPException(status_code=419, detail=f"An error occurred: {e}")
     
 
-
-
-
-
-
 ### TABULAR ANALYSIS ----------------------------------------------------------------
-
-
-
-
-
 
 
 safety_settings = [
@@ -520,16 +462,9 @@ safety_settings = [
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
 
-
-
 sns.set_theme(color_codes=True)
 uploaded_df = None
 question_responses = []
-
-
-
-
-
 
 def format_text(text):
     # Replace **text** with <b>text</b>
@@ -568,9 +503,6 @@ def clean_data(df):
     df.drop(columns=unique_value_columns, inplace=True)
 
     return df
-
-
-
 
 def clean_data2(df):
     for col in df.columns:
@@ -689,9 +621,8 @@ async def result(api_key: str = Form(...),
 
     # Function to generate Gemini response based on the plot
     def generate_gemini_response(plot_path):
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        img = Image.open(plot_path)
+        model = GenerativeModel("gemini-2.0-flash-exp")
+        img = Image.load_from_file(plot_path)
         response = model.generate_content([custom_question + " Analyze the data insights from the chart.", img])
         response.resolve()
         return response.text
@@ -818,14 +749,7 @@ async def multiclass(
         # Concatenate target variable and columns for analysis into a single DataFrame
         df = pd.concat([target_variable_data, columns_for_analysis_data], axis=1)
 
-        
-
         # Generate visualizations
-
-
-
-
-        
 
         # Multiclass Barplot
         excluded_words = ["name", "postal", "date", "phone", "address", "id"]
@@ -909,15 +833,11 @@ async def multiclass(
         plt.close(fig)
 
         # Google Gemini Responses
-        genai.configure(api_key=api_key)
-
-        # Response for the barplot
-        img_barplot = Image.open(plot3_path)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = GenerativeModel("gemini-2.0-flash-exp")
+        img_barplot = Image.load_from_file(plot3_path)
         response3 = format_text(model.generate_content([custom_question, img_barplot]).text)
 
-        # Response for the histplot
-        img_histplot = Image.open(plot4_path)
+        img_histplot = Image.load_from_file(plot4_path)
         response4 = format_text(model.generate_content([custom_question, img_histplot]).text)
 
         document_analyzed = True
@@ -967,10 +887,6 @@ async def multiclass(
         pdf.output(pdf_output_path)
         pdf_file_path = pdf_output_path.replace("\\", "/")
 
-
-
-        
-        
         # Upload files to external endpoint
         url = "https://api.goarif.co/api/v1/Attachment/Upload/Paython"
 
@@ -1014,14 +930,14 @@ async def ask_question(
     question: str = Form(...),
     file: UploadFile = File(...)
 ):
-    global uploaded_file_path, document_analyzed, summary, api, llm
+    global uploaded_file_path, document_analyzed, summary
     
     loader = None
 
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
+        llm = ChatVertexAI(model_name="gemini-2.0-flash-exp")
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1048,7 +964,7 @@ async def ask_question(
         os.environ["GOOGLE_API_KEY"] = api_key
 
         # Initialize embeddings and create FAISS vector store
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        embeddings = VertexAIEmbeddings(model_name="text-embedding-004")
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
         chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
         document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
@@ -1124,25 +1040,10 @@ def save_to_json(question_responses):
         json.dump(outputs, outfile)
 
 
-
-
-
-
-
-
-
 ## SENTIMENT ANALYSIS ----------------------------------------------------------------
-
-
 
 question_responses = []
 document_analyzed = False
-
-
-
-
-
-
 
 # Create stemmer
 factory = StemmerFactory()
@@ -1206,9 +1107,6 @@ async def process_file(request: Request, file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=419, detail=str(e))
-
-
-
 
 @app.post("/py/v1/analyze", response_model=AnalyzeDocumentResponse2)
 async def analyze(
@@ -1352,16 +1250,12 @@ async def analyze(
 
         # Use Google Gemini API to generate content based on the uploaded image
         img = PIL.Image.open(wordcloud_positive)
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
-        try:
-            response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud positive sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the positive sentiment analysis.", img])
-            response.resolve()
-            gemini_response_pos = format_text(response.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_pos = "Error: Failed to generate content with Gemini API."
+        model = GenerativeModel("gemini-2.0-flash-exp")
+        response = model.generate_content(
+            [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_positive)],
+            safety_settings=safety_settings
+        )
+        gemini_response_pos = format_text(response.text)
 
         # Create WordCloud Neutral
         wordcloud = WordCloud(
@@ -1373,13 +1267,11 @@ async def analyze(
         wordcloud.to_file(wordcloud_neutral)
 
         img = PIL.Image.open(wordcloud_neutral)
-        try:
-            response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud neutral sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the neutral sentiment analysis.", img])
-            response.resolve()
-            gemini_response_neu = format_text(response.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neu = "Error: Failed to generate content with Gemini API."
+        response = model.generate_content(
+            [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_neutral)],
+            safety_settings=safety_settings
+        )
+        gemini_response_neu = format_text(response.text)
 
         # Create WordCloud Negative
         wordcloud = WordCloud(
@@ -1391,13 +1283,11 @@ async def analyze(
         wordcloud.to_file(wordcloud_negative)
 
         img = PIL.Image.open(wordcloud_negative)
-        try:
-            response = model.generate_content([custom_question + "As a marketing consultant, I aim to analyze consumer insights derived from the chart and the current market context. By focusing on the key findings related to wordcloud negative sentiment, I can formulate actionable insights. Please provide explanations in bullet points based on the negative sentiment analysis.", img])
-            response.resolve()
-            gemini_response_neg = format_text(response.text)
-        except Exception as e:
-            print(f"Error generating content with Gemini: {e}")
-            gemini_response_neg = "Error: Failed to generate content with Gemini API."
+        response = model.generate_content(
+            [custom_question + "As a marketing consultant...", Image.load_from_file(wordcloud_negative)],
+            safety_settings=safety_settings
+        )
+        gemini_response_neg = format_text(response.text)
 
 
         
@@ -1428,11 +1318,12 @@ async def analyze(
 
 
         def generate_gemini_response(plot_path):
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
-            img = Image.open(plot_path)
-            response = model.generate_content([custom_question + " As a marketing consultant, I want to analyze consumer insights from the sentiment word clouds (positive, neutral, and negative) and the market context. Please summarize your explanation and findings in one concise paragraph and one another paragraph for business insight and reccomendation to help me formulate actionable strategies.", img])
-            response.resolve()
+            model = GenerativeModel("gemini-2.0-flash-exp")
+            img = Image.load_from_file(plot_path)
+            response = model.generate_content(
+                [custom_question + " As a marketing consultant...", img],
+                safety_settings=safety_settings
+            )
             return response.text
         
         response_result = format_text(generate_gemini_response(combined_wordcloud_path))
@@ -1547,14 +1438,14 @@ async def ask_question(
     question: str = Form(...),
     file: UploadFile = File(...)
 ):
-    global uploaded_file_path, document_analyzed, summary, api, llm
+    global uploaded_file_path, document_analyzed, summary
     
     loader = None
 
     try:
 
         # Initialize the LLM model
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=api_key)
+        llm = ChatVertexAI(model_name="gemini-2.0-flash-exp")
 
         uploaded_file_path = "uploaded_file" + os.path.splitext(file.filename)[1]
         with open(uploaded_file_path, "wb") as f:
@@ -1581,7 +1472,7 @@ async def ask_question(
         os.environ["GOOGLE_API_KEY"] = api_key
 
         # Initialize embeddings and create FAISS vector store
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        embeddings = VertexAIEmbeddings(model_name="text-embedding-004")
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
         chunks = text_splitter.split_documents(docs)  # Pass the list of Document objects
         document_search = FAISS.from_texts([chunk.page_content for chunk in chunks], embeddings)
@@ -1913,9 +1804,6 @@ async def result(
         # Convert the DataFrame to a list of dictionaries
         #table_data_list1 = recommendation_df.to_dict('records')
 
-       
-        
-
         result_csv_path = 'result1.csv'
         recommendation_df.to_csv(result_csv_path, index=False)
 
@@ -1927,9 +1815,11 @@ async def result(
         result_csv_path1 = 'combined_result.csv'
         combined_df.to_csv(result_csv_path1, index=False)
 
-        api = api_key
-        genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        # Replace genai configuration with Vertex AI
+        llm = ChatVertexAI(model_name="gemini-1.5-flash-latest")  # Updated to use Vertex AI
+        
+        # Remove this line as it's no longer needed
+        # genai.configure(api_key=api)
 
         # Load and process the CSV file
         loader = UnstructuredCSVLoader(result_csv_path1, mode="elements")
@@ -2044,7 +1934,7 @@ async def result(
     question: str = Form(...),
     api_key: str = Form(...),
     file: UploadFile = File(...),
-    target_variable: str = Form(...),
+    target_variable: str = Form(...)
 ):
     if file.filename == '':
         raise HTTPException(status_code=400, detail="No file selected")
@@ -2087,8 +1977,6 @@ async def result(
         
         # 3. Handle missing values
         df = df.fillna(df.mode().iloc[0])
-
-        
 
         # Save original label mappings for object data types
         label_encoders = {}
@@ -2143,12 +2031,6 @@ async def result(
         #import json
         #table_data_json = json.dumps(table_data_list)
 
-        
-
-        
-        
-        
-
         print("Data successfully written to output.json")
 
         # Save the DataFrame as a CSV file
@@ -2156,9 +2038,11 @@ async def result(
         predictions_df.to_csv(result_csv_path, index=False)
 
 
-        api = api_key
-        genai.configure(api_key=api)
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=api)
+        # Replace genai configuration with Vertex AI
+        llm = ChatVertexAI(model_name="gemini-1.5-flash-latest")  # Updated to use Vertex AI
+        
+        # Remove this line as it's no longer needed
+        # genai.configure(api_key=api)
 
         # Load the result CSV data for analysis
         loader = UnstructuredCSVLoader(result_csv_path, mode="elements")
