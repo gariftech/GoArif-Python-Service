@@ -26,7 +26,7 @@ RUN mkdir -p /app/static
 FROM base AS runner
 WORKDIR /app
 
-RUN apt-get update && apt-get install \
+RUN apt-get update && apt-get install -y \
     apt-transport-https \
     ca-certificates \
     gnupg \
