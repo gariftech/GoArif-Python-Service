@@ -44,6 +44,7 @@ scipy
 plotly
 kaleido
 textwrap3
+opencv-python
 
 # Web and file upload support
 python-multipart
