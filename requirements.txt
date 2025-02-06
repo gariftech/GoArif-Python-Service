@@ -10,6 +10,7 @@ langchain-community
 google-generativeai
 google-cloud-aiplatform
 langchain_google_vertexai
+
 # File handling and document processing
 pypdf
 unstructured
@@ -18,6 +19,7 @@ docx2txt
 python-magic
 python-pptx
 python-dotenv
+
 # Async support
 nest-asyncio
 
