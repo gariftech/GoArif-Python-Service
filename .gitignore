@@ -1,1 +1,7 @@
 goarif_python
+
+.venv
+
+# Byte-compiled / optimized / DLL files
+__pycache__
+.ruff_cache/
